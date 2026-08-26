@@ -28,8 +28,9 @@ class FakeResponse:
     def __exit__(self, *_: object) -> None:
         return None
 
-    def read(self) -> bytes:
-        return self.body.encode("utf-8")
+    def read(self, limit: int = -1) -> bytes:
+        content = self.body.encode("utf-8")
+        return content if limit < 0 else content[:limit]
 
 
 class OllamaClientTests(SimpleTestCase):
@@ -83,5 +84,13 @@ class OllamaClientTests(SimpleTestCase):
     @patch("theatre.services.llm.client.urlopen")
     def test_invalid_provider_envelope_is_rejected(self, mocked_urlopen: Any) -> None:
         mocked_urlopen.return_value = FakeResponse("not-json")
+        with self.assertRaises(InvalidLLMResponseError):
+            self.client.generate("prompt", response_schema={})
+
+    @patch("theatre.services.llm.client.urlopen")
+    def test_oversized_http_response_is_rejected(self, mocked_urlopen: Any) -> None:
+        mocked_urlopen.return_value = FakeResponse(
+            "x" * (self.client.max_http_response_bytes + 1)
+        )
         with self.assertRaises(InvalidLLMResponseError):
             self.client.generate("prompt", response_schema={})

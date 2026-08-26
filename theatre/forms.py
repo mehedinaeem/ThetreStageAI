@@ -18,6 +18,7 @@ def _generation_run_label(run: GenerationRun) -> str:
 class ProductionBriefForm(forms.Form):
     story_idea = forms.CharField(
         label="Story idea",
+        max_length=4_000,
         widget=forms.Textarea(
             attrs={
                 "rows": 5,
@@ -53,6 +54,7 @@ class ProductionBriefForm(forms.Form):
     )
     available_lights = forms.CharField(
         label="Available lighting fixtures",
+        max_length=2_000,
         help_text="Separate fixtures with commas, for example: PAR01, PAR02, Fresnel01",
         widget=forms.TextInput(attrs={"placeholder": "PAR01, PAR02, Fresnel01"}),
     )
@@ -74,6 +76,15 @@ class ProductionBriefForm(forms.Form):
     def fixtures(self) -> list[str]:
         value = self.cleaned_data["available_lights"]
         return [fixture.strip() for fixture in value.replace("\n", ",").split(",") if fixture.strip()]
+
+    def clean_available_lights(self) -> str:
+        value = self.cleaned_data["available_lights"]
+        fixtures = [item.strip() for item in value.replace("\n", ",").split(",") if item.strip()]
+        if len(fixtures) > 50:
+            raise forms.ValidationError("Provide no more than 50 lighting fixtures.")
+        if any(len(item) > 100 for item in fixtures):
+            raise forms.ValidationError("Each lighting fixture name must be 100 characters or fewer.")
+        return value
 
     def complete_prompt(self) -> str:
         data = self.cleaned_data

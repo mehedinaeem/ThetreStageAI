@@ -19,20 +19,20 @@ class OriginalTheatreRecord(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    id: str = Field(min_length=1)
-    title: str = Field(min_length=1)
+    id: str = Field(min_length=1, max_length=255)
+    title: str = Field(min_length=1, max_length=500)
     theme: str | None = None
     genre: str | None = None
     scene_type: str | None = None
     location: str | None = None
     time: str | None = None
     emotion: dict[str, Any] | str | None = None
-    characters: list[str] = Field(default_factory=list)
-    dialogue: list[dict[str, Any]] = Field(default_factory=list)
-    stage_directions: list[str] = Field(default_factory=list)
-    blocking: list[dict[str, Any]] = Field(default_factory=list)
-    lighting: list[dict[str, Any]] = Field(default_factory=list)
-    sound: list[dict[str, Any]] = Field(default_factory=list)
+    characters: list[str] = Field(default_factory=list, max_length=100)
+    dialogue: list[dict[str, Any]] = Field(default_factory=list, max_length=1_000)
+    stage_directions: list[str] = Field(default_factory=list, max_length=500)
+    blocking: list[dict[str, Any]] = Field(default_factory=list, max_length=1_000)
+    lighting: list[dict[str, Any]] = Field(default_factory=list, max_length=1_000)
+    sound: list[dict[str, Any]] = Field(default_factory=list, max_length=500)
     summary: str | None = None
 
 
@@ -41,10 +41,10 @@ class RetrievalViewDocument(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    id: str = Field(min_length=1)
+    id: str = Field(min_length=1, max_length=255)
     view_type: ViewType
-    source_id: str = Field(min_length=1)
-    search_text: str = Field(min_length=1)
+    source_id: str = Field(min_length=1, max_length=255)
+    search_text: str = Field(min_length=1, max_length=12_000)
     metadata: dict[str, Any]
     payload: dict[str, Any]
 

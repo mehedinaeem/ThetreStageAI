@@ -61,6 +61,15 @@ class GenerationRun(models.Model):
         related_name="generation_runs",
     )
     model_name = models.CharField(max_length=255)
+    model_settings = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Allowlisted non-secret model settings used for this run.",
+    )
+    user_input = models.TextField(
+        blank=True,
+        help_text="Immutable user theatre requirements snapshot for reproducibility.",
+    )
     scene_sources = models.JSONField(
         default=list,
         blank=True,
@@ -112,6 +121,10 @@ class GenerationRun(models.Model):
     )
     validated = models.BooleanField(default=False, db_index=True)
     validation_errors = models.JSONField(default=list, blank=True)
+    repair_attempts = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Number of structured validation-repair requests made.",
+    )
     generation_time_seconds = models.FloatField(
         validators=[MinValueValidator(0.0)],
         help_text="End-to-end generation duration in seconds.",

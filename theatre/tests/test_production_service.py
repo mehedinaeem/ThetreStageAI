@@ -114,6 +114,10 @@ class ProductionServiceIntegrationTests(TestCase):
         self.assertEqual(outcome.project.generated_json["title"], "শেষ কথা")
         self.assertTrue(outcome.run.validated)
         self.assertEqual(outcome.run.generated_json["title"], "শেষ কথা")
+        self.assertEqual(outcome.run.user_input, outcome.project.user_prompt)
+        self.assertEqual(outcome.run.repair_attempts, 0)
+        self.assertEqual(outcome.run.retrieval_config["scene_top_k"], 5)
+        self.assertEqual(outcome.run.retrieval_config["combined_top_k"], 11)
         self.assertEqual(len(outcome.run.scene_sources), 5)
         self.assertEqual(len(outcome.run.blocking_sources), 3)
         self.assertEqual(len(outcome.run.lighting_sources), 3)
@@ -223,6 +227,7 @@ class ProductionServiceIntegrationTests(TestCase):
         project = TheatreProject.objects.get(pk=captured.exception.project.pk)
         self.assertEqual(project.generated_json, {})
         self.assertFalse(project.generation_runs.get().validated)
+        self.assertEqual(project.generation_runs.get().repair_attempts, 1)
 
     @patch("theatre.views.generate_production")
     def test_view_renders_safe_pipeline_error(self, mocked_generate: Any) -> None:

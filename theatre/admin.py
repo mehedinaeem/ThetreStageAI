@@ -6,7 +6,10 @@ from .models import GenerationRun, TheatreProject
 
 class GenerationRunInline(admin.TabularInline):
     model = GenerationRun
-    fields = ("model_name", "rag_mode", "validated", "generation_time_seconds", "created_at")
+    fields = (
+        "model_name", "rag_mode", "repair_attempts", "validated",
+        "generation_time_seconds", "created_at",
+    )
     readonly_fields = fields
     extra = 0
     show_change_link = True

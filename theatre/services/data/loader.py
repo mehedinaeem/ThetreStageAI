@@ -12,6 +12,7 @@ from pydantic import BaseModel, ValidationError
 from .schemas import MalformedRecord, OriginalTheatreRecord, RetrievalViewDocument, ViewType
 
 logger = logging.getLogger(__name__)
+MAX_JSONL_LINE_BYTES = 2_000_000
 
 RecordT = TypeVar("RecordT", bound=BaseModel)
 ErrorObserver = Callable[[dict[str, Any]], None]
@@ -38,6 +39,10 @@ def _read_jsonl(
     with source:
         for line_number, raw_line in enumerate(source, start=1):
             try:
+                if len(raw_line) > MAX_JSONL_LINE_BYTES:
+                    raise ValueError(
+                        f"JSONL record exceeds {MAX_JSONL_LINE_BYTES} bytes"
+                    )
                 line = raw_line.decode("utf-8")
                 value = json.loads(line)
                 if not isinstance(value, dict):

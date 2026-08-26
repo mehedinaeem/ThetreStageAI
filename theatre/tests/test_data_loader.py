@@ -7,6 +7,7 @@ from tempfile import TemporaryDirectory
 from django.test import SimpleTestCase
 
 from theatre.services.data.loader import (
+    MAX_JSONL_LINE_BYTES,
     detect_view_type,
     load_original_records,
     load_retrieval_records,
@@ -57,3 +58,12 @@ class DataLoaderTests(SimpleTestCase):
     def test_detect_view_type_rejects_unknown_records(self) -> None:
         with self.assertRaisesRegex(ValueError, "Unable to detect"):
             detect_view_type({"id": "unknown"})
+
+    def test_oversized_jsonl_record_is_skipped(self) -> None:
+        with TemporaryDirectory() as temporary_directory:
+            path = Path(temporary_directory) / "scene_view.jsonl"
+            path.write_bytes(b"{" + b"x" * MAX_JSONL_LINE_BYTES + b"}\n")
+            records, errors = load_retrieval_records(path)
+        self.assertEqual(records, [])
+        self.assertEqual(len(errors), 1)
+        self.assertIn("exceeds", errors[0].reason)

@@ -47,6 +47,9 @@ class LLMProvider(ABC):
 class OllamaClient(LLMProvider):
     """Non-streaming client for Ollama's local `/api/generate` endpoint."""
 
+    generation_options = {"temperature": 0.2}
+    max_http_response_bytes = 2_000_000
+
     def __init__(self, base_url: str, model: str, *, timeout_seconds: int = 180) -> None:
         if not base_url.strip():
             raise ValueError("Ollama URL cannot be empty")
@@ -71,7 +74,7 @@ class OllamaClient(LLMProvider):
             "stream": False,
             "think": False,
             "format": response_schema,
-            "options": {"temperature": 0.2},
+            "options": dict(self.generation_options),
         }
         if system_prompt:
             body["system"] = system_prompt
@@ -84,7 +87,12 @@ class OllamaClient(LLMProvider):
         logger.info("Requesting structured generation from Ollama model %s", self.model)
         try:
             with urlopen(request, timeout=self.timeout_seconds) as response:
-                raw_body = response.read().decode("utf-8")
+                raw_bytes = response.read(self.max_http_response_bytes + 1)
+                if len(raw_bytes) > self.max_http_response_bytes:
+                    raise InvalidLLMResponseError(
+                        "Ollama response exceeded the configured size limit"
+                    )
+                raw_body = raw_bytes.decode("utf-8")
         except HTTPError as exc:
             detail = self._http_error_detail(exc)
             if exc.code == 404 or ("model" in detail.lower() and "not found" in detail.lower()):
@@ -125,10 +133,22 @@ class OllamaClient(LLMProvider):
             raise InvalidLLMResponseError("Ollama response contains no generated text")
         return generated.strip()
 
+    def reproducibility_settings(self) -> dict[str, Any]:
+        """Return only non-secret settings that affect model generation."""
+        return {
+            "provider": "ollama",
+            "temperature": self.generation_options["temperature"],
+            "think": False,
+            "timeout_seconds": self.timeout_seconds,
+        }
+
     @staticmethod
     def _http_error_detail(error: HTTPError) -> str:
         try:
-            raw = error.read().decode("utf-8")
+            raw = error.read(8_193)
+            if len(raw) > 8_192:
+                return "Oversized error response"
+            raw = raw.decode("utf-8")
             parsed = json.loads(raw)
             if isinstance(parsed, dict) and parsed.get("error"):
                 return str(parsed["error"])

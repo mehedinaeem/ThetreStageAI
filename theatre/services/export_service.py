@@ -67,12 +67,12 @@ def export_blocking_csv(production_data: Mapping[str, Any]) -> bytes:
     production = _validated_dict(production_data)
     rows = (
         {
-            "scene_id": scene["id"],
-            "actor": cue["actor"],
-            "trigger": cue["trigger"],
-            "from": cue["from"],
-            "to": cue["to"],
-            "action": cue["action"],
+            "scene_id": _spreadsheet_safe(scene["id"]),
+            "actor": _spreadsheet_safe(cue["actor"]),
+            "trigger": _spreadsheet_safe(cue["trigger"]),
+            "from": _spreadsheet_safe(cue["from"]),
+            "to": _spreadsheet_safe(cue["to"]),
+            "action": _spreadsheet_safe(cue["action"]),
         }
         for scene in production["scenes"]
         for cue in scene["blocking"]
@@ -84,11 +84,11 @@ def export_lighting_csv(production_data: Mapping[str, Any]) -> bytes:
     production = _validated_dict(production_data)
     rows = (
         {
-            "scene_id": scene["id"],
-            "cue_id": cue["cue_id"],
-            "trigger": cue["trigger"],
-            "fixture": cue["fixture"],
-            "focus_zone": cue["focus_zone"],
+            "scene_id": _spreadsheet_safe(scene["id"]),
+            "cue_id": _spreadsheet_safe(cue["cue_id"]),
+            "trigger": _spreadsheet_safe(cue["trigger"]),
+            "fixture": _spreadsheet_safe(cue["fixture"]),
+            "focus_zone": _spreadsheet_safe(cue["focus_zone"]),
             "red": cue["rgb"][0],
             "green": cue["rgb"][1],
             "blue": cue["rgb"][2],
@@ -115,3 +115,10 @@ def _csv_bytes(
     writer.writeheader()
     writer.writerows(rows)
     return stream.getvalue().encode("utf-8-sig")
+
+
+def _spreadsheet_safe(value: object) -> object:
+    """Prevent untrusted text cells from being interpreted as spreadsheet formulas."""
+    if isinstance(value, str) and value.lstrip().startswith(("=", "+", "-", "@")):
+        return "'" + value
+    return value

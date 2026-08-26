@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 
 from django.test import SimpleTestCase
 
@@ -98,3 +99,22 @@ class RetrieverTests(SimpleTestCase):
             SceneRetriever(RecordingEmbedder(), self.store).retrieve(
                 "সংঘাত", metadata_filters={"unknown": "value"}
             )
+
+    def test_malformed_qdrant_payloads_are_skipped_without_breaking_results(self) -> None:
+        response = SimpleNamespace(points=[
+            SimpleNamespace(payload=["not", "an", "object"], score=0.99),
+            SimpleNamespace(payload={"search_text": "missing source"}, score=0.98),
+            SimpleNamespace(payload={
+                "source_id": "safe-source", "search_text": "নিরাপদ রেফারেন্স",
+                "metadata": {}, "payload": {},
+            }, score=0.9),
+        ])
+        fake_store = SimpleNamespace(
+            client=SimpleNamespace(query_points=lambda **_: response)
+        )
+
+        results = SceneRetriever(RecordingEmbedder(), fake_store).retrieve("সংঘাত")
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].source_id, "safe-source")
+        self.assertEqual(results[0].rank, 1)

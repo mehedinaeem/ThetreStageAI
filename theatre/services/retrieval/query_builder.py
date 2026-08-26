@@ -70,6 +70,8 @@ class MultiViewQueryBuilder:
         request = user_request.strip()
         if not request:
             raise ValueError("User request cannot be empty")
+        if len(request) > 8_000:
+            raise ValueError("User request exceeds the retrieval query limit")
         focus = ", ".join(self._headings[view_type])
         text = (
             f"বাংলা থিয়েটারের {view_type.value} উদাহরণ অনুসন্ধান।\n"

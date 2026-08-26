@@ -15,6 +15,7 @@ from theatre.services.rag.modes import RAGMode
 from theatre.services.retrieval.base import RetrievalResult
 
 SELECTION_SALT = "thetrestageai.research.rag.selection.v1"
+MAX_SELECTION_TOKEN_CHARS = 500_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +38,12 @@ def retrieve_for_research(
     combined_top_k: int = 11,
     rag_mode: RAGMode | str = RAGMode.FULL_MULTIVIEW,
 ) -> ResearchRetrieval:
+    query = query.strip()
+    if not query or len(query) > 2_000:
+        raise ValueError("Research query must contain 1 to 2000 characters")
+    limits = (scene_top_k, blocking_top_k, lighting_top_k, combined_top_k)
+    if any(value < 1 or value > 50 for value in limits):
+        raise ValueError("Research Top-K values must be between 1 and 50")
     selected_mode = RAGMode(rag_mode)
     service = build_default_service()
     try:
@@ -71,12 +78,19 @@ def retrieve_for_research(
         salt=SELECTION_SALT,
         compress=True,
     )
+    if len(selection_token) > MAX_SELECTION_TOKEN_CHARS:
+        raise ProductionServiceError(
+            "selection_too_large",
+            "The retrieved research selection is too large to preserve safely. Reduce Top-K and try again.",
+        )
     return ResearchRetrieval(
         query, selected_mode, scene, blocking, lighting, top_k, selection_token
     )
 
 
 def generate_from_research_selection(token: str, *, max_age: int = 3_600) -> ProductionOutcome:
+    if not token or len(token) > MAX_SELECTION_TOKEN_CHARS:
+        raise signing.BadSignature("Invalid research selection size")
     data = signing.loads(token, salt=SELECTION_SALT, max_age=max_age)
     if not isinstance(data, dict):
         raise signing.BadSignature("Invalid research selection")
@@ -84,7 +98,7 @@ def generate_from_research_selection(token: str, *, max_age: int = 3_600) -> Pro
     top_k = data.get("top_k")
     try:
         rag_mode = RAGMode(data.get("rag_mode"))
-    except ValueError as exc:
+    except (TypeError, ValueError) as exc:
         raise signing.BadSignature("Invalid RAG mode") from exc
     if not query or not isinstance(top_k, dict):
         raise signing.BadSignature("Incomplete research selection")
@@ -94,6 +108,19 @@ def generate_from_research_selection(token: str, *, max_age: int = 3_600) -> Pro
         lighting = [RetrievalResult.model_validate(item) for item in data["lighting"]]
     except (KeyError, TypeError, ValueError) as exc:
         raise signing.BadSignature("Malformed research selection") from exc
+    if len(query) > 2_000 or any(len(items) > 50 for items in (scene, blocking, lighting)):
+        raise signing.BadSignature("Research selection exceeds safe limits")
+    try:
+        clean_top_k = {key: int(value) for key, value in top_k.items()}
+    except (TypeError, ValueError) as exc:
+        raise signing.BadSignature("Malformed Top-K configuration") from exc
+    expected_keys = {
+        "scene_top_k", "blocking_top_k", "lighting_top_k", "combined_top_k"
+    }
+    if set(clean_top_k) != expected_keys or any(
+        value < 1 or value > 50 for value in clean_top_k.values()
+    ):
+        raise signing.BadSignature("Invalid Top-K configuration")
 
     request_data: dict[str, Any] = {
         "story_idea": query,
@@ -113,7 +140,7 @@ def generate_from_research_selection(token: str, *, max_age: int = 3_600) -> Pro
             request_data,
             retrieved_results=(scene, blocking, lighting),
             research_query=query,
-            retrieval_config={key: int(value) for key, value in top_k.items()},
+            retrieval_config=clean_top_k,
             rag_mode=rag_mode,
         )
     finally:

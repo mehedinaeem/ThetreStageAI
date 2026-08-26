@@ -30,6 +30,10 @@ from theatre.services.rag import (
 from theatre.services.retrieval import BlockingRetriever, LightingRetriever, SceneRetriever
 from theatre.services.retrieval.base import RetrievalResult
 from theatre.services.validation import ProductionValidationError
+from theatre.services.experiment_logging import (
+    log_generation_run,
+    safe_model_settings,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -70,9 +74,16 @@ class ProductionServiceError(RuntimeError):
 
 
 class ProductionService:
-    def __init__(self, dependencies: ProductionDependencies, *, model_name: str) -> None:
+    def __init__(
+        self,
+        dependencies: ProductionDependencies,
+        *,
+        model_name: str,
+        model_settings: dict[str, Any] | None = None,
+    ) -> None:
         self.dependencies = dependencies
         self.model_name = model_name
+        self.model_settings = safe_model_settings(model_settings)
         self._research_query = ""
         self._retrieval_config: dict[str, int] = {}
         self._rag_mode = DEFAULT_RAG_MODE
@@ -93,11 +104,23 @@ class ProductionService:
         except ValueError as exc:
             raise ValueError(f"Unsupported RAG mode: {rag_mode}") from exc
         self._research_query = research_query
-        self._retrieval_config = dict(
-            retrieval_config
-            or ({"scene_top_k": 5, "blocking_top_k": 3, "lighting_top_k": 3}
-                if retrieved_results is None else {})
-        )
+        default_config = {
+            "scene_top_k": 5,
+            "blocking_top_k": 3,
+            "lighting_top_k": 3,
+            "combined_top_k": 11,
+        }
+        if retrieved_results is None:
+            self._retrieval_config = default_config | dict(retrieval_config or {})
+        else:
+            scene, blocking, lighting = retrieved_results
+            actual_config = {
+                "scene_top_k": len(scene),
+                "blocking_top_k": len(blocking),
+                "lighting_top_k": len(lighting),
+                "combined_top_k": len(scene) + len(blocking) + len(lighting),
+            }
+            self._retrieval_config = actual_config | dict(retrieval_config or {})
         project = self._create_project(request_data)
         started = perf_counter()
         scene_results: list[RetrievalResult] = []
@@ -161,6 +184,7 @@ class ProductionService:
                 code=code, message=str(exc),
                 validation_errors=errors,
                 raw_output=exc.corrected_output or exc.initial_output,
+                repair_attempts=1,
             )
             raise ProductionServiceError(
                 code,
@@ -171,7 +195,11 @@ class ProductionService:
             self._fail(project, started, scene_results, blocking_results, lighting_results,
                        "malformed_output", "The local model returned an unreadable response. Please try again.", exc)
         except Exception as exc:
-            logger.exception("Unexpected production pipeline failure for project %s", project.pk)
+            logger.error(
+                "Unexpected production pipeline failure project=%s error_type=%s",
+                project.pk,
+                type(exc).__name__,
+            )
             self._fail(project, started, scene_results, blocking_results, lighting_results,
                        "pipeline_unavailable", "The local generation pipeline is unavailable. Check the index and local model services.", exc)
 
@@ -182,6 +210,8 @@ class ProductionService:
             run = GenerationRun.objects.create(
                 project=project,
                 model_name=self.model_name,
+                model_settings=self.model_settings,
+                user_input=project.user_prompt,
                 scene_sources=self._source_ids(scene_results),
                 blocking_sources=self._source_ids(blocking_results),
                 lighting_sources=self._source_ids(lighting_results),
@@ -193,11 +223,13 @@ class ProductionService:
                 generated_json=generation.production.model_dump(mode="json", by_alias=True),
                 validated=True,
                 validation_errors=generation.validation_errors,
+                repair_attempts=1 if generation.repaired else 0,
                 generation_time_seconds=elapsed,
                 research_query=self._research_query,
                 retrieval_config=self._retrieval_config,
                 rag_mode=self._rag_mode.value,
             )
+        log_generation_run(run)
         logger.info("Generated and saved project %s in %.3f seconds", project.pk, elapsed)
         return ProductionOutcome(project=project, run=run)
 
@@ -342,15 +374,20 @@ class ProductionService:
     def _fail(self, project: TheatreProject, started: float, scene: list[RetrievalResult],
               blocking: list[RetrievalResult], lighting: list[RetrievalResult],
               code: str, message: str, exception: Exception) -> None:
-        logger.warning("Production pipeline error %s for project %s: %s", code, project.pk, exception)
-        self._record_failure(project, started, scene, blocking, lighting, code=code, message=str(exception))
+        logger.warning(
+            "Production pipeline error code=%s project=%s error_type=%s",
+            code, project.pk, type(exception).__name__,
+        )
+        self._record_failure(
+            project, started, scene, blocking, lighting, code=code, message=message
+        )
         raise ProductionServiceError(code, message, project=project) from exception
 
     def _record_failure(self, project: TheatreProject, started: float,
                         scene: list[RetrievalResult], blocking: list[RetrievalResult],
                         lighting: list[RetrievalResult], *, code: str, message: str,
                         validation_errors: list[dict[str, Any]] | None = None,
-                        raw_output: str = "") -> GenerationRun:
+                        raw_output: str = "", repair_attempts: int = 0) -> GenerationRun:
         trace = [
             {
                 "source_id": item.source_id,
@@ -366,16 +403,20 @@ class ProductionService:
             for item in [*scene, *blocking, *lighting]
         ]
         errors = validation_errors or [{"code": code, "message": message}]
-        return GenerationRun.objects.create(
+        run = GenerationRun.objects.create(
             project=project, model_name=self.model_name,
+            model_settings=self.model_settings, user_input=project.user_prompt,
             scene_sources=self._source_ids(scene), blocking_sources=self._source_ids(blocking),
             lighting_sources=self._source_ids(lighting), retrieval_trace=trace,
             raw_output=raw_output, validated=False, validation_errors=errors,
+            repair_attempts=repair_attempts,
             generation_time_seconds=perf_counter() - started,
             research_query=self._research_query,
             retrieval_config=self._retrieval_config,
             rag_mode=self._rag_mode.value,
         )
+        log_generation_run(run)
+        return run
 
     @staticmethod
     def _source_ids(results: list[RetrievalResult]) -> list[str]:
@@ -411,7 +452,11 @@ def build_default_service() -> ProductionService:
         lighting_retriever=LightingRetriever(embedder, store),
         generator=TheatreGenerator(client, context_builder),
     )
-    return ProductionService(dependencies, model_name=settings.THETRESTAGEAI_LLM_MODEL)
+    return ProductionService(
+        dependencies,
+        model_name=settings.THETRESTAGEAI_LLM_MODEL,
+        model_settings=client.reproducibility_settings(),
+    )
 
 
 def generate_production(request_data: dict[str, Any]) -> ProductionOutcome:

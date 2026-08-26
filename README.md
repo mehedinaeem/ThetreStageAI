@@ -204,4 +204,15 @@ retrieval, and full scene/blocking/lighting multi-view retrieval. Every
 The combined baseline sends one unexpanded query through the existing collections,
 globally ranks the candidates by similarity, and retains the configured combined
 Top-K.
+
+### Reproducibility logging
+
+Every pipeline-created `GenerationRun` emits one structured
+`theatre.research.experiments` log event after database persistence. The event
+contains the run timestamp, model and allowlisted generation settings, RAG mode,
+credential-redacted user input, effective per-retriever Top-K, source IDs and
+similarity scores, duration, validation status, repair count, and safe error fields.
+Raw model output, retrieved payloads, server URLs, credentials, and environment
+variables are never included. Configure verbosity with
+`THETRESTAGEAI_EXPERIMENT_LOG_LEVEL`.
 # ThetreStageAI

@@ -76,6 +76,13 @@ class ExportServiceTests(TestCase):
             ("220", "120", "60"),
         )
 
+    def test_csv_text_cells_are_safe_from_spreadsheet_formulas(self) -> None:
+        hostile = production_data()
+        hostile["scenes"][0]["blocking"][0]["action"] = "=HYPERLINK(\"bad\")"
+        content = export_blocking_csv(hostile).decode("utf-8-sig")
+        rows = list(csv.DictReader(io.StringIO(content)))
+        self.assertEqual(rows[0]["action"], "'=HYPERLINK(\"bad\")")
+
 
 class ExportViewTests(TestCase):
     def setUp(self) -> None:

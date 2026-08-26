@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
+import math
 from collections import defaultdict
 from typing import Any
 
@@ -24,6 +26,9 @@ from .services.export_service import (
 )
 from .services.production_service import ProductionServiceError, generate_production
 from .services.research_service import generate_from_research_selection, retrieve_for_research
+from .services.validation import Production
+
+logger = logging.getLogger(__name__)
 
 
 def home(request: HttpRequest) -> HttpResponse:
@@ -58,7 +63,7 @@ def new_production(request: HttpRequest) -> HttpResponse:
 def production_detail(request: HttpRequest, pk: int) -> HttpResponse:
     project = get_object_or_404(TheatreProject, pk=pk)
     run = project.generation_runs.first()
-    production = copy.deepcopy(project.generated_json) if project.generated_json else {}
+    production = _safe_production_snapshot(project.generated_json)
     for scene in production.get("scenes", []):
         for cue in scene.get("lighting", []):
             rgb = cue.get("rgb", [])
@@ -196,15 +201,36 @@ def _group_sources(trace: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]
         if not isinstance(item, dict):
             continue
         view_type = str(item.get("view_type", "")).lower()
-        if view_type in {"scene", "blocking", "lighting"}:
-            grouped[view_type].append(item)
+        if view_type not in {"scene", "blocking", "lighting"}:
+            continue
+        try:
+            rank = int(item.get("rank"))
+            score = float(item.get("score"))
+        except (TypeError, ValueError):
+            continue
+        source_id = str(item.get("source_id", "")).strip()
+        if rank < 1 or not math.isfinite(score) or not source_id:
+            continue
+        metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+        grouped[view_type].append({
+            "view_type": view_type,
+            "source_id": source_id[:255],
+            "rank": rank,
+            "score": score,
+            "metadata": {
+                key: str(metadata[key])[:500]
+                for key in ("theme", "scene_type")
+                if key in metadata
+            },
+        })
     for results in grouped.values():
         results.sort(key=lambda item: (item.get("rank", 10_000), -item.get("score", 0)))
+        del results[50:]
     return dict(grouped)
 
 
 def _comparison_payload(run: GenerationRun) -> dict[str, Any]:
-    production = copy.deepcopy(run.generated_json) if run.generated_json else {}
+    production = _safe_production_snapshot(run.generated_json)
     for scene in production.get("scenes", []):
         for cue in scene.get("lighting", []):
             rgb = cue.get("rgb", [])
@@ -215,6 +241,17 @@ def _comparison_payload(run: GenerationRun) -> dict[str, Any]:
         "production": production,
         "sources": _group_sources(run.retrieval_trace),
     }
+
+
+def _safe_production_snapshot(value: object) -> dict[str, Any]:
+    if not value:
+        return {}
+    try:
+        production = Production.model_validate(value)
+    except ValidationError:
+        logger.warning("Refusing to render malformed stored production JSON")
+        return {}
+    return copy.deepcopy(production.model_dump(mode="json", by_alias=True))
 
 
 @api_view(["GET"])

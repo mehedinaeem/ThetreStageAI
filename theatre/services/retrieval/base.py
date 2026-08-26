@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 import logging
+import json
 from typing import Any, ClassVar
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from qdrant_client.http import models
 
 from theatre.services.data.schemas import ViewType
@@ -20,10 +21,10 @@ class RetrievalResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     rank: int = Field(ge=1)
-    score: float
-    source_id: str
+    score: float = Field(allow_inf_nan=False)
+    source_id: str = Field(min_length=1, max_length=255)
     view_type: ViewType
-    search_text: str
+    search_text: str = Field(min_length=1, max_length=12_000)
     metadata: dict[str, Any]
     payload: dict[str, Any]
 
@@ -66,8 +67,8 @@ class BaseRetriever:
         query_text: str | None = None,
     ) -> list[RetrievalResult]:
         result_limit = self.default_limit if limit is None else limit
-        if result_limit < 1:
-            raise ValueError("Retrieval limit must be positive")
+        if result_limit < 1 or result_limit > 100:
+            raise ValueError("Retrieval limit must be between 1 and 100")
         query = self.query_builder.build_for_view(
             user_request if query_text is None else query_text,
             self.view_type,
@@ -100,19 +101,29 @@ class BaseRetriever:
             raise
 
         results: list[RetrievalResult] = []
-        for rank, point in enumerate(response.points, start=1):
-            stored = point.payload or {}
-            results.append(
-                RetrievalResult(
-                    rank=rank,
+        for point in response.points:
+            stored = point.payload
+            if not isinstance(stored, dict):
+                logger.warning("Skipping malformed Qdrant point with non-object payload")
+                continue
+            try:
+                result = RetrievalResult(
+                    rank=len(results) + 1,
                     score=float(point.score),
-                    source_id=str(stored.get("source_id", "")),
+                    source_id=stored.get("source_id"),
                     view_type=self.view_type,
-                    search_text=str(stored.get("search_text", "")),
-                    metadata=self._mapping(stored.get("metadata")),
-                    payload=self._mapping(stored.get("payload")),
+                    search_text=stored.get("search_text"),
+                    metadata=self._mapping(stored.get("metadata"), max_bytes=20_000),
+                    payload=self._mapping(stored.get("payload"), max_bytes=50_000),
                 )
-            )
+            except (TypeError, ValueError, ValidationError) as exc:
+                logger.warning(
+                    "Skipping malformed Qdrant point in %s: %s",
+                    collection,
+                    type(exc).__name__,
+                )
+                continue
+            results.append(result)
         return results
 
     def _build_filter(
@@ -133,5 +144,15 @@ class BaseRetriever:
         return models.Filter(must=conditions)
 
     @staticmethod
-    def _mapping(value: Any) -> dict[str, Any]:
-        return value if isinstance(value, dict) else {}
+    def _mapping(value: Any, *, max_bytes: int) -> dict[str, Any]:
+        if not isinstance(value, dict):
+            return {}
+        try:
+            encoded = json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode(
+                "utf-8"
+            )
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Qdrant mapping is not valid JSON data") from exc
+        if len(encoded) > max_bytes:
+            raise ValueError("Qdrant mapping exceeds safe size limit")
+        return value

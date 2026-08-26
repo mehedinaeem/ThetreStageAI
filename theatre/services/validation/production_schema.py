@@ -26,32 +26,33 @@ class StrictSchema(BaseModel):
 
 
 class Character(StrictSchema):
-    name: str = Field(min_length=1)
-    description: str = Field(min_length=1)
+    name: str = Field(min_length=1, max_length=100)
+    description: str = Field(min_length=1, max_length=1_000)
 
 
 class Dialogue(StrictSchema):
-    id: str = Field(min_length=1)
-    speaker: str = Field(min_length=1)
-    text: str = Field(min_length=1)
+    id: str = Field(min_length=1, max_length=100)
+    speaker: str = Field(min_length=1, max_length=100)
+    text: str = Field(min_length=1, max_length=5_000)
 
 
 class BlockingCue(StrictSchema):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    actor: str = Field(min_length=1)
+    actor: str = Field(min_length=1, max_length=100)
     from_zone: StageZone = Field(alias="from")
     to: StageZone
-    action: str = Field(min_length=1)
-    trigger: str = Field(min_length=1)
+    action: str = Field(min_length=1, max_length=1_000)
+    trigger: str = Field(min_length=1, max_length=100)
 
 
 RGBValue = Annotated[int, Field(ge=0, le=255)]
+StageDirection = Annotated[str, Field(min_length=1, max_length=5_000)]
 
 
 class LightingCue(StrictSchema):
-    cue_id: str = Field(min_length=1)
-    trigger: str = Field(min_length=1)
-    fixture: str = Field(min_length=1)
+    cue_id: str = Field(min_length=1, max_length=100)
+    trigger: str = Field(min_length=1, max_length=100)
+    fixture: str = Field(min_length=1, max_length=255)
     focus_zone: StageZone
     rgb: tuple[RGBValue, RGBValue, RGBValue]
     intensity: int = Field(ge=0, le=100)
@@ -59,22 +60,22 @@ class LightingCue(StrictSchema):
 
 
 class SoundCue(StrictSchema):
-    cue_id: str = Field(min_length=1)
-    trigger: str = Field(min_length=1)
-    sound: str = Field(min_length=1)
+    cue_id: str = Field(min_length=1, max_length=100)
+    trigger: str = Field(min_length=1, max_length=100)
+    sound: str = Field(min_length=1, max_length=1_000)
     volume: float = Field(ge=0, le=1)
 
 
 class Scene(StrictSchema):
-    id: str = Field(min_length=1)
-    title: str = Field(min_length=1)
-    location: str = Field(min_length=1)
-    time: str = Field(min_length=1)
-    dialogue: list[Dialogue] = Field(min_length=1)
-    stage_directions: list[str] = Field(min_length=1)
-    blocking: list[BlockingCue] = Field(min_length=1)
-    lighting: list[LightingCue] = Field(min_length=1)
-    sound: list[SoundCue] = Field(default_factory=list)
+    id: str = Field(min_length=1, max_length=100)
+    title: str = Field(min_length=1, max_length=500)
+    location: str = Field(min_length=1, max_length=500)
+    time: str = Field(min_length=1, max_length=200)
+    dialogue: list[Dialogue] = Field(min_length=1, max_length=500)
+    stage_directions: list[StageDirection] = Field(min_length=1, max_length=200)
+    blocking: list[BlockingCue] = Field(min_length=1, max_length=500)
+    lighting: list[LightingCue] = Field(min_length=1, max_length=500)
+    sound: list[SoundCue] = Field(default_factory=list, max_length=200)
 
     @model_validator(mode="after")
     def validate_scene_references(self) -> Self:
@@ -109,11 +110,11 @@ class Scene(StrictSchema):
 
 
 class Production(StrictSchema):
-    title: str = Field(min_length=1)
-    theme: str = Field(min_length=1)
-    genre: str = Field(min_length=1)
-    characters: list[Character] = Field(min_length=1)
-    scenes: list[Scene] = Field(min_length=1)
+    title: str = Field(min_length=1, max_length=500)
+    theme: str = Field(min_length=1, max_length=500)
+    genre: str = Field(min_length=1, max_length=100)
+    characters: list[Character] = Field(min_length=1, max_length=50)
+    scenes: list[Scene] = Field(min_length=1, max_length=30)
 
     @model_validator(mode="after")
     def validate_character_references(self) -> Self:
