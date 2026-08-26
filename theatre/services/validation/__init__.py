@@ -1,6 +1,6 @@
 """Pydantic schemas and generated-output validation boundary."""
 
-from .output_validator import OutputValidator, ProductionValidationError
+from .output_validator import OutputValidationResult, OutputValidator, ProductionValidationError
 from .production_schema import (
     BlockingCue,
     Character,
@@ -24,6 +24,7 @@ __all__ = [
     "GeneratedTheatreProduction",
     "LightingCue",
     "OutputValidator",
+    "OutputValidationResult",
     "Production",
     "ProductionValidationError",
     "Scene",

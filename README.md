@@ -163,4 +163,23 @@ containing both sets of validation issues; no partially valid lighting data is r
 
 For macOS and Windows installers, use the official Ollama download page:
 <https://ollama.com/download>.
+
+## End-to-end web generation
+
+After migrating the database, building the RAG index, starting Ollama, and pulling
+the configured model, the New Production form runs the complete local pipeline:
+
+```bash
+python manage.py migrate
+python manage.py build_rag_index
+ollama serve
+# In another terminal:
+ollama pull qwen3:4b
+python manage.py runserver
+```
+
+The Django view delegates orchestration to `theatre.services.production_service`.
+Every accepted brief creates a project, successful runs store validated JSON and
+retrieval evidence, and failed runs retain controlled diagnostic evidence without
+exposing stack traces or unsafe lighting data to the UI.
 # ThetreStageAI

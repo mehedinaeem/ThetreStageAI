@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 from pydantic import ValidationError
@@ -35,11 +36,23 @@ class ProductionValidationError(RuntimeError):
         initial_errors: list[dict[str, Any]],
         final_errors: list[dict[str, Any]] | None = None,
         correction_error: str | None = None,
+        initial_output: str = "",
+        corrected_output: str = "",
     ) -> None:
         super().__init__(message)
         self.initial_errors = initial_errors
         self.final_errors = final_errors or []
         self.correction_error = correction_error
+        self.initial_output = initial_output
+        self.corrected_output = corrected_output
+
+
+@dataclass(frozen=True, slots=True)
+class OutputValidationResult:
+    production: Production
+    accepted_output: str
+    initial_errors: list[dict[str, Any]]
+    repaired: bool
 
 
 class OutputValidator:
@@ -51,8 +64,13 @@ class OutputValidator:
 
     def validate(self, raw_output: str) -> Production:
         """Return only safe output, with exactly one correction attempt when invalid."""
+        return self.validate_with_details(raw_output).production
+
+    def validate_with_details(self, raw_output: str) -> OutputValidationResult:
+        """Validate while retaining correction evidence for experiment records."""
         try:
-            return self._validate_once(raw_output)
+            production = self._validate_once(raw_output)
+            return OutputValidationResult(production, raw_output, [], False)
         except ValidationError as initial_exception:
             initial_errors = self._errors(initial_exception)
             logger.warning(
@@ -74,10 +92,12 @@ class OutputValidator:
                 "Generated production was invalid and its correction request failed",
                 initial_errors=initial_errors,
                 correction_error=str(exc),
+                initial_output=raw_output,
             ) from exc
 
         try:
-            return self._validate_once(corrected_output)
+            production = self._validate_once(corrected_output)
+            return OutputValidationResult(production, corrected_output, initial_errors, True)
         except ValidationError as final_exception:
             final_errors = self._errors(final_exception)
             logger.error(
@@ -88,6 +108,8 @@ class OutputValidator:
                 "Generated production remained invalid after one correction attempt",
                 initial_errors=initial_errors,
                 final_errors=final_errors,
+                initial_output=raw_output,
+                corrected_output=corrected_output,
             ) from final_exception
 
     def _validate_once(self, raw_output: str) -> Production:

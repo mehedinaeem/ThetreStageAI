@@ -15,6 +15,10 @@ from .prompts import SYSTEM_PROMPT, build_generation_prompt
 class GenerationResult:
     production: Production
     retrieval_trace: list[RetrievalTrace]
+    raw_output: str
+    accepted_output: str
+    validation_errors: list[dict[str, object]]
+    repaired: bool
 
 
 class TheatreGenerator:
@@ -48,5 +52,12 @@ class TheatreGenerator:
             response_schema=schema,
             system_prompt=SYSTEM_PROMPT,
         )
-        production = self.output_validator.validate(raw_response)
-        return GenerationResult(production=production, retrieval_trace=trace)
+        validation = self.output_validator.validate_with_details(raw_response)
+        return GenerationResult(
+            production=validation.production,
+            retrieval_trace=trace,
+            raw_output=raw_response,
+            accepted_output=validation.accepted_output,
+            validation_errors=validation.initial_errors,
+            repaired=validation.repaired,
+        )

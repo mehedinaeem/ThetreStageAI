@@ -1,0 +1,6 @@
+{% extends "theatre/base.html" %}
+{% block title %}RAG Sources · ThetreStageAI{% endblock %}
+{% block content %}
+<section class="page-header"><div class="container"><div class="eyebrow mb-3">Retrieval evidence</div><h1 class="page-title">RAG sources</h1><p class="text-secondary mb-0">Independent scene, blocking, and lighting references retained for research traceability{% if project %} · {{ project.title }}{% endif %}.</p></div></section>
+<section class="pb-5"><div class="container">{% if run %}<div class="research-note mb-4"><span>Model</span><strong>{{ run.model_name }}</strong><span>Run</span><strong>#{{ run.pk }}</strong><span>Status</span><strong>{% if run.validated %}Validated{% else %}Invalid{% endif %}</strong></div>{% endif %}<div class="row g-4"><div class="col-lg-4"><h2 class="source-heading">Scene References</h2>{% include "theatre/partials/source_list.html" with results=sources.scene %}</div><div class="col-lg-4"><h2 class="source-heading">Blocking References</h2>{% include "theatre/partials/source_list.html" with results=sources.blocking %}</div><div class="col-lg-4"><h2 class="source-heading">Lighting References</h2>{% include "theatre/partials/source_list.html" with results=sources.lighting %}</div></div></div></section>
+{% endblock %}
