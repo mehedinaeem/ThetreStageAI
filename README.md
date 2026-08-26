@@ -98,4 +98,18 @@ The command embeds only each document's `search_text` using normalized BAAI/bge-
 vectors and cosine similarity. It preserves the complete retrieval document in the
 Qdrant point payload. The embedding and upsert batch sizes can be tuned through
 `EMBEDDING_BATCH_SIZE` and `QDRANT_UPSERT_BATCH_SIZE`.
+
+## Testing multi-view retrieval
+
+After building the index, run one Bengali request through three independently
+constructed semantic queries:
+
+```bash
+python manage.py test_retrieval "দুইজন চরিত্রের রাগপূর্ণ পারিবারিক সংঘাত"
+```
+
+Scene retrieval returns five results, while blocking and lighting retrieval each
+return three. Application code may also pass exact-match metadata filters such as
+`theme`, `genre`, `scene_type`, `location`, `time`, `actors_count`, or `emotion` to
+an individual retriever.
 # ThetreStageAI
