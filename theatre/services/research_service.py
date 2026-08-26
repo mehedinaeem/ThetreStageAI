@@ -11,6 +11,7 @@ from theatre.services.production_service import (
     ProductionServiceError,
     build_default_service,
 )
+from theatre.services.rag.modes import RAGMode
 from theatre.services.retrieval.base import RetrievalResult
 
 SELECTION_SALT = "thetrestageai.research.rag.selection.v1"
@@ -19,6 +20,7 @@ SELECTION_SALT = "thetrestageai.research.rag.selection.v1"
 @dataclass(frozen=True, slots=True)
 class ResearchRetrieval:
     query: str
+    rag_mode: RAGMode
     scene_results: list[RetrievalResult]
     blocking_results: list[RetrievalResult]
     lighting_results: list[RetrievalResult]
@@ -32,36 +34,34 @@ def retrieve_for_research(
     scene_top_k: int,
     blocking_top_k: int,
     lighting_top_k: int,
+    combined_top_k: int = 11,
+    rag_mode: RAGMode | str = RAGMode.FULL_MULTIVIEW,
 ) -> ResearchRetrieval:
+    selected_mode = RAGMode(rag_mode)
     service = build_default_service()
     try:
-        results = service.retrieve_sources(
+        results = service.retrieve_for_mode(
             query,
+            mode=selected_mode,
             scene_top_k=scene_top_k,
             blocking_top_k=blocking_top_k,
             lighting_top_k=lighting_top_k,
+            combined_top_k=combined_top_k,
         )
     finally:
         service.dependencies.store.close()
     scene, blocking, lighting = results
-    empty = [
-        name
-        for name, values in (("scene", scene), ("blocking", blocking), ("lighting", lighting))
-        if not values
-    ]
-    if empty:
-        raise ProductionServiceError(
-            "empty_retrieval",
-            f"No {'/'.join(empty)} references were found. Rebuild the RAG index and try again.",
-        )
+    service.require_results_for_mode(selected_mode, scene, blocking, lighting)
     top_k = {
         "scene_top_k": scene_top_k,
         "blocking_top_k": blocking_top_k,
         "lighting_top_k": lighting_top_k,
+        "combined_top_k": combined_top_k,
     }
     selection_token = signing.dumps(
         {
             "query": query,
+            "rag_mode": selected_mode.value,
             "top_k": top_k,
             "scene": [item.model_dump(mode="json") for item in scene],
             "blocking": [item.model_dump(mode="json") for item in blocking],
@@ -71,7 +71,9 @@ def retrieve_for_research(
         salt=SELECTION_SALT,
         compress=True,
     )
-    return ResearchRetrieval(query, scene, blocking, lighting, top_k, selection_token)
+    return ResearchRetrieval(
+        query, selected_mode, scene, blocking, lighting, top_k, selection_token
+    )
 
 
 def generate_from_research_selection(token: str, *, max_age: int = 3_600) -> ProductionOutcome:
@@ -80,6 +82,10 @@ def generate_from_research_selection(token: str, *, max_age: int = 3_600) -> Pro
         raise signing.BadSignature("Invalid research selection")
     query = str(data.get("query", "")).strip()
     top_k = data.get("top_k")
+    try:
+        rag_mode = RAGMode(data.get("rag_mode"))
+    except ValueError as exc:
+        raise signing.BadSignature("Invalid RAG mode") from exc
     if not query or not isinstance(top_k, dict):
         raise signing.BadSignature("Incomplete research selection")
     try:
@@ -108,6 +114,7 @@ def generate_from_research_selection(token: str, *, max_age: int = 3_600) -> Pro
             retrieved_results=(scene, blocking, lighting),
             research_query=query,
             retrieval_config={key: int(value) for key, value in top_k.items()},
+            rag_mode=rag_mode,
         )
     finally:
         service.dependencies.store.close()

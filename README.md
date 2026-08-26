@@ -194,4 +194,14 @@ Use `export_expert_evaluation_csv(records, path)` to create the theatre-expert r
 sheet. All quality ratings and comments are deliberately blank until completed by
 human evaluators. `export_experiment_csv(records, path)` exports the objective run
 metadata separately.
+
+### RAG ablation modes
+
+The research inspector at `/research/rag/` supports six reproducible modes: no
+RAG, scene-only, scene plus blocking, scene plus lighting, single combined
+retrieval, and full scene/blocking/lighting multi-view retrieval. Every
+`GenerationRun` stores its `rag_mode`, source evidence, scores, and Top-K settings.
+The combined baseline sends one unexpanded query through the existing collections,
+globally ranks the candidates by similarity, and retains the configured combined
+Top-K.
 # ThetreStageAI

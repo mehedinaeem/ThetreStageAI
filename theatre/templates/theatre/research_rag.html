@@ -14,18 +14,20 @@
       {% csrf_token %}<input type="hidden" name="action" value="retrieve">
       {% if pipeline_error %}<div class="alert error-panel" role="alert"><strong>Research operation failed.</strong><div>{{ pipeline_error }}</div>{% if error_code %}<small>Error reference: {{ error_code }}</small>{% endif %}</div>{% endif %}
       <div class="row g-3 align-items-end">
-        <div class="col-xl-6">{% include "theatre/partials/form_field.html" with field=form.query %}</div>
+        <div class="col-xl-5">{% include "theatre/partials/form_field.html" with field=form.query %}</div>
+        <div class="col-xl-3">{% include "theatre/partials/form_field.html" with field=form.rag_mode %}</div>
         <div class="col-4 col-xl-1">{% include "theatre/partials/form_field.html" with field=form.scene_top_k %}</div>
         <div class="col-4 col-xl-1">{% include "theatre/partials/form_field.html" with field=form.blocking_top_k %}</div>
         <div class="col-4 col-xl-1">{% include "theatre/partials/form_field.html" with field=form.lighting_top_k %}</div>
-        <div class="col-xl-3"><button class="btn btn-stage w-100" type="submit">Run Multi-View Retrieval</button></div>
+        <div class="col-xl-2">{% include "theatre/partials/form_field.html" with field=form.combined_top_k %}</div>
+        <div class="col-xl-2"><button class="btn btn-stage w-100" type="submit">Run Selected Mode</button></div>
       </div>
     </form>
 
     {% if retrieval %}
       <div class="research-selection-bar mb-4">
-        <div><span class="content-label d-block">Exact query</span><strong lang="bn">{{ retrieval.query }}</strong></div>
-        <div class="ms-lg-auto d-flex flex-wrap gap-2"><span class="meta-chip">Scene K={{ retrieval.top_k.scene_top_k }}</span><span class="meta-chip">Blocking K={{ retrieval.top_k.blocking_top_k }}</span><span class="meta-chip">Lighting K={{ retrieval.top_k.lighting_top_k }}</span></div>
+        <div><span class="content-label d-block">Exact query</span><strong lang="bn">{{ retrieval.query }}</strong><div class="mt-2"><span class="meta-chip">{{ retrieval.rag_mode.label }}</span></div></div>
+        <div class="ms-lg-auto d-flex flex-wrap gap-2"><span class="meta-chip">Scene K={{ retrieval.top_k.scene_top_k }}</span><span class="meta-chip">Blocking K={{ retrieval.top_k.blocking_top_k }}</span><span class="meta-chip">Lighting K={{ retrieval.top_k.lighting_top_k }}</span><span class="meta-chip">Combined K={{ retrieval.top_k.combined_top_k }}</span></div>
         <form method="post" data-loading-form>{% csrf_token %}<input type="hidden" name="action" value="generate"><input type="hidden" name="selection_token" value="{{ retrieval.selection_token }}"><button class="btn btn-stage" type="submit">Generate Using These Sources</button></form>
       </div>
       <div class="row g-3 research-columns">

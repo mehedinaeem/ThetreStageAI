@@ -63,16 +63,20 @@ class BaseRetriever:
         limit: int | None = None,
         metadata_filters: dict[str, MetadataValue] | None = None,
         score_threshold: float | None = None,
+        query_text: str | None = None,
     ) -> list[RetrievalResult]:
         result_limit = self.default_limit if limit is None else limit
         if result_limit < 1:
             raise ValueError("Retrieval limit must be positive")
         query = self.query_builder.build_for_view(
-            user_request,
+            user_request if query_text is None else query_text,
             self.view_type,
             metadata_filters=metadata_filters,
         )
-        vector = self.embedder.embed([query.text])[0]
+        embedding_text = query.text if query_text is None else query_text.strip()
+        if not embedding_text:
+            raise ValueError("Retrieval query cannot be empty")
+        vector = self.embedder.embed([embedding_text])[0]
         query_filter = self._build_filter(query.metadata_filters)
         collection = COLLECTION_BY_VIEW[self.view_type]
         logger.info(

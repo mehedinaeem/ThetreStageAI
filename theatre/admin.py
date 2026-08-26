@@ -6,7 +6,7 @@ from .models import GenerationRun, TheatreProject
 
 class GenerationRunInline(admin.TabularInline):
     model = GenerationRun
-    fields = ("model_name", "validated", "generation_time_seconds", "created_at")
+    fields = ("model_name", "rag_mode", "validated", "generation_time_seconds", "created_at")
     readonly_fields = fields
     extra = 0
     show_change_link = True
@@ -36,11 +36,12 @@ class GenerationRunAdmin(admin.ModelAdmin):
         "id",
         "project",
         "model_name",
+        "rag_mode",
         "validated",
         "generation_time_seconds",
         "created_at",
     )
-    list_filter = ("validated", "model_name", "created_at")
+    list_filter = ("rag_mode", "validated", "model_name", "created_at")
     search_fields = ("project__title", "model_name", "research_query", "raw_output")
     readonly_fields = ("created_at",)
     list_select_related = ("project",)

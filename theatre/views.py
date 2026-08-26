@@ -120,6 +120,8 @@ def research_rag(request: HttpRequest) -> HttpResponse:
                 scene_top_k=form.cleaned_data["scene_top_k"],
                 blocking_top_k=form.cleaned_data["blocking_top_k"],
                 lighting_top_k=form.cleaned_data["lighting_top_k"],
+                combined_top_k=form.cleaned_data["combined_top_k"],
+                rag_mode=form.cleaned_data["rag_mode"],
             )
         except ProductionServiceError as exc:
             context.update(pipeline_error=exc.user_message, error_code=exc.code)

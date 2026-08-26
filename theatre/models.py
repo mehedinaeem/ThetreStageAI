@@ -90,6 +90,20 @@ class GenerationRun(models.Model):
         blank=True,
         help_text="Selected per-view Top-K configuration for reproducibility.",
     )
+    rag_mode = models.CharField(
+        max_length=32,
+        default="full_multiview",
+        db_index=True,
+        choices=(
+            ("no_rag", "Mode 1 — No RAG"),
+            ("scene_only", "Mode 2 — Scene-only RAG"),
+            ("scene_blocking", "Mode 3 — Scene + Blocking RAG"),
+            ("scene_lighting", "Mode 4 — Scene + Lighting RAG"),
+            ("single_combined", "Mode 5 — Single combined retrieval RAG"),
+            ("full_multiview", "Mode 6 — Full Multi-View RAG"),
+        ),
+        help_text="Retrieval ablation mode used for this generation run.",
+    )
     raw_output = models.TextField(blank=True)
     validated = models.BooleanField(default=False, db_index=True)
     validation_errors = models.JSONField(default=list, blank=True)

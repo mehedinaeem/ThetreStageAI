@@ -19,7 +19,14 @@ from theatre.services.llm import (
     OllamaClient,
     TheatreGenerator,
 )
-from theatre.services.rag import COLLECTION_BY_VIEW, ContextBuilder, EmbeddingService, QdrantStore
+from theatre.services.rag import (
+    COLLECTION_BY_VIEW,
+    DEFAULT_RAG_MODE,
+    ContextBuilder,
+    EmbeddingService,
+    QdrantStore,
+    RAGMode,
+)
 from theatre.services.retrieval import BlockingRetriever, LightingRetriever, SceneRetriever
 from theatre.services.retrieval.base import RetrievalResult
 from theatre.services.validation import ProductionValidationError
@@ -68,6 +75,7 @@ class ProductionService:
         self.model_name = model_name
         self._research_query = ""
         self._retrieval_config: dict[str, int] = {}
+        self._rag_mode = DEFAULT_RAG_MODE
 
     def generate_production(
         self,
@@ -78,7 +86,12 @@ class ProductionService:
         ] | None = None,
         research_query: str = "",
         retrieval_config: dict[str, int] | None = None,
+        rag_mode: RAGMode | str = DEFAULT_RAG_MODE,
     ) -> ProductionOutcome:
+        try:
+            self._rag_mode = RAGMode(rag_mode)
+        except ValueError as exc:
+            raise ValueError(f"Unsupported RAG mode: {rag_mode}") from exc
         self._research_query = research_query
         self._retrieval_config = dict(
             retrieval_config
@@ -93,12 +106,19 @@ class ProductionService:
         try:
             prompt = project.user_prompt
             if retrieved_results is None:
-                scene_results, blocking_results, lighting_results = self.retrieve_sources(
-                    prompt, scene_top_k=5, blocking_top_k=3, lighting_top_k=3
+                scene_results, blocking_results, lighting_results = self.retrieve_for_mode(
+                    prompt,
+                    mode=self._rag_mode,
+                    scene_top_k=self._retrieval_config.get("scene_top_k", 5),
+                    blocking_top_k=self._retrieval_config.get("blocking_top_k", 3),
+                    lighting_top_k=self._retrieval_config.get("lighting_top_k", 3),
+                    combined_top_k=self._retrieval_config.get("combined_top_k", 11),
                 )
             else:
                 scene_results, blocking_results, lighting_results = retrieved_results
-            self._require_results(scene_results, blocking_results, lighting_results)
+            self.require_results_for_mode(
+                self._rag_mode, scene_results, blocking_results, lighting_results
+            )
             generation = self.dependencies.generator.generate(
                 prompt,
                 scene_results,
@@ -175,6 +195,7 @@ class ProductionService:
                 generation_time_seconds=elapsed,
                 research_query=self._research_query,
                 retrieval_config=self._retrieval_config,
+                rag_mode=self._rag_mode.value,
             )
         logger.info("Generated and saved project %s in %.3f seconds", project.pk, elapsed)
         return ProductionOutcome(project=project, run=run)
@@ -187,13 +208,77 @@ class ProductionService:
         blocking_top_k: int,
         lighting_top_k: int,
     ) -> tuple[list[RetrievalResult], list[RetrievalResult], list[RetrievalResult]]:
-        self._require_index()
+        self._require_index(frozenset(ViewType))
         try:
             return (
                 self.dependencies.scene_retriever.retrieve(query, limit=scene_top_k),
                 self.dependencies.blocking_retriever.retrieve(query, limit=blocking_top_k),
                 self.dependencies.lighting_retriever.retrieve(query, limit=lighting_top_k),
             )
+        except Exception as exc:
+            raise ProductionServiceError(
+                "qdrant_unavailable",
+                "The local retrieval index could not be queried. Ensure Qdrant storage is available and rebuild the index if necessary.",
+            ) from exc
+
+    def retrieve_for_mode(
+        self,
+        query: str,
+        *,
+        mode: RAGMode | str,
+        scene_top_k: int,
+        blocking_top_k: int,
+        lighting_top_k: int,
+        combined_top_k: int = 11,
+    ) -> tuple[list[RetrievalResult], list[RetrievalResult], list[RetrievalResult]]:
+        """Retrieve evidence for one ablation mode using the shared retrievers."""
+        selected_mode = RAGMode(mode)
+        if selected_mode is RAGMode.NO_RAG:
+            return [], [], []
+        self._require_index(selected_mode.active_views)
+        try:
+            if selected_mode is RAGMode.SINGLE_COMBINED:
+                if combined_top_k < 1:
+                    raise ValueError("Combined Top-K must be positive")
+                candidates = [
+                    *self.dependencies.scene_retriever.retrieve(
+                        query, limit=combined_top_k, query_text=query
+                    ),
+                    *self.dependencies.blocking_retriever.retrieve(
+                        query, limit=combined_top_k, query_text=query
+                    ),
+                    *self.dependencies.lighting_retriever.retrieve(
+                        query, limit=combined_top_k, query_text=query
+                    ),
+                ]
+                combined = sorted(candidates, key=lambda item: (-item.score, item.rank))[
+                    :combined_top_k
+                ]
+                reranked = [
+                    item.model_copy(update={"rank": rank})
+                    for rank, item in enumerate(combined, start=1)
+                ]
+                return (
+                    [item for item in reranked if item.view_type is ViewType.SCENE],
+                    [item for item in reranked if item.view_type is ViewType.BLOCKING],
+                    [item for item in reranked if item.view_type is ViewType.LIGHTING],
+                )
+
+            scene = (
+                self.dependencies.scene_retriever.retrieve(query, limit=scene_top_k)
+                if ViewType.SCENE in selected_mode.active_views else []
+            )
+            blocking = (
+                self.dependencies.blocking_retriever.retrieve(query, limit=blocking_top_k)
+                if ViewType.BLOCKING in selected_mode.active_views else []
+            )
+            lighting = (
+                self.dependencies.lighting_retriever.retrieve(query, limit=lighting_top_k)
+                if ViewType.LIGHTING in selected_mode.active_views else []
+            )
+            return scene, blocking, lighting
+        except ProductionServiceError:
+            raise
         except Exception as exc:
             raise ProductionServiceError(
                 "qdrant_unavailable",
@@ -215,19 +300,43 @@ class ProductionService:
             stage_size=data["stage_size"], available_lights=list(lights),
         )
 
-    def _require_index(self) -> None:
+    def _require_index(self, active_views: frozenset[ViewType]) -> None:
         try:
-            missing = [name for name in COLLECTION_BY_VIEW.values() if not self.dependencies.store.client.collection_exists(name)]
+            missing = [
+                COLLECTION_BY_VIEW[view]
+                for view in active_views
+                if not self.dependencies.store.client.collection_exists(COLLECTION_BY_VIEW[view])
+            ]
         except Exception as exc:
             raise ProductionServiceError("qdrant_unavailable", "The local Qdrant store is unavailable. Close other index processes and try again.") from exc
         if missing:
             raise ProductionServiceError("index_not_built", "The theatre dataset has not been indexed. Run 'python manage.py build_rag_index' first.")
 
     @staticmethod
-    def _require_results(scene: list[RetrievalResult], blocking: list[RetrievalResult], lighting: list[RetrievalResult]) -> None:
-        empty = [name for name, values in (("scene", scene), ("blocking", blocking), ("lighting", lighting)) if not values]
+    def require_results_for_mode(
+        mode: RAGMode,
+        scene: list[RetrievalResult],
+        blocking: list[RetrievalResult],
+        lighting: list[RetrievalResult],
+    ) -> None:
+        if mode is RAGMode.NO_RAG:
+            return
+        by_view = {
+            ViewType.SCENE: scene,
+            ViewType.BLOCKING: blocking,
+            ViewType.LIGHTING: lighting,
+        }
+        if mode is RAGMode.SINGLE_COMBINED:
+            if any(by_view.values()):
+                return
+            empty = ["combined"]
+        else:
+            empty = [view.value for view in mode.active_views if not by_view[view]]
         if empty:
-            raise ProductionServiceError("empty_retrieval", f"No {'/'.join(empty)} references were found. Rebuild the RAG index and try again.")
+            raise ProductionServiceError(
+                "empty_retrieval",
+                f"No {'/'.join(empty)} references were found. Rebuild the RAG index and try again.",
+            )
 
     def _fail(self, project: TheatreProject, started: float, scene: list[RetrievalResult],
               blocking: list[RetrievalResult], lighting: list[RetrievalResult],
@@ -264,6 +373,7 @@ class ProductionService:
             generation_time_seconds=perf_counter() - started,
             research_query=self._research_query,
             retrieval_config=self._retrieval_config,
+            rag_mode=self._rag_mode.value,
         )
 
     @staticmethod

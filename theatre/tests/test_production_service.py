@@ -18,6 +18,7 @@ from theatre.services.production_service import (
     ProductionServiceError,
 )
 from theatre.services.rag.context_builder import RetrievalTrace
+from theatre.services.rag.modes import RAGMode
 from theatre.services.retrieval.base import RetrievalResult
 from theatre.services.validation import Production, ProductionValidationError
 
@@ -66,9 +67,11 @@ class FakeRetriever:
     def __init__(self, results: list[RetrievalResult]) -> None:
         self.results = results
         self.limits: list[int] = []
+        self.calls: list[dict[str, Any]] = []
 
     def retrieve(self, _: str, **kwargs: Any) -> list[RetrievalResult]:
         self.limits.append(kwargs["limit"])
+        self.calls.append(kwargs)
         return self.results
 
 
@@ -135,6 +138,44 @@ class ProductionServiceIntegrationTests(TestCase):
         self.assertEqual(outcome.run.scene_sources, ["natok_0"])
         self.assertEqual(outcome.run.retrieval_trace[0]["score"], 0.95)
 
+    def test_no_rag_bypasses_index_and_persists_mode(self) -> None:
+        pipeline, retrievers = service(exists=False)
+
+        outcome = pipeline.generate_production(request_data(), rag_mode=RAGMode.NO_RAG)
+
+        self.assertEqual(outcome.run.rag_mode, RAGMode.NO_RAG.value)
+        self.assertEqual(outcome.run.retrieval_trace, [])
+        self.assertEqual(outcome.run.scene_sources, [])
+        self.assertEqual([item.calls for item in retrievers], [[], [], []])
+
+    def test_partial_modes_call_only_their_active_retrievers(self) -> None:
+        cases = (
+            (RAGMode.SCENE_ONLY, [[5], [], []]),
+            (RAGMode.SCENE_BLOCKING, [[5], [3], []]),
+            (RAGMode.SCENE_LIGHTING, [[5], [], [3]]),
+            (RAGMode.FULL_MULTIVIEW, [[5], [3], [3]]),
+        )
+        for mode, expected_limits in cases:
+            with self.subTest(mode=mode):
+                pipeline, retrievers = service()
+                outcome = pipeline.generate_production(request_data(), rag_mode=mode)
+                self.assertEqual(outcome.run.rag_mode, mode.value)
+                self.assertEqual([item.limits for item in retrievers], expected_limits)
+
+    def test_single_combined_mode_uses_one_raw_query_and_global_top_k(self) -> None:
+        pipeline, retrievers = service()
+
+        outcome = pipeline.generate_production(
+            request_data(),
+            rag_mode=RAGMode.SINGLE_COMBINED,
+            retrieval_config={"combined_top_k": 2},
+        )
+
+        self.assertEqual(outcome.run.rag_mode, RAGMode.SINGLE_COMBINED.value)
+        self.assertEqual(len(outcome.run.retrieval_trace), 2)
+        self.assertTrue(all(item.calls[0]["query_text"] for item in retrievers))
+        self.assertEqual([item.limits for item in retrievers], [[2], [2], [2]])
+
     def test_missing_index_is_controlled_and_recorded(self) -> None:
         pipeline, _ = service(exists=False)
         with self.assertRaises(ProductionServiceError) as captured:
@@ -160,8 +201,14 @@ class ProductionServiceIntegrationTests(TestCase):
             with self.subTest(code=code):
                 pipeline, _ = service(generator_error=error)
                 with self.assertRaises(ProductionServiceError) as captured:
-                    pipeline.generate_production(request_data())
+                    pipeline.generate_production(
+                        request_data(), rag_mode=RAGMode.SCENE_ONLY
+                    )
                 self.assertEqual(captured.exception.code, code)
+                self.assertEqual(
+                    GenerationRun.objects.latest("id").rag_mode,
+                    RAGMode.SCENE_ONLY.value,
+                )
 
     def test_failed_repair_never_saves_generated_json(self) -> None:
         error = ProductionValidationError(

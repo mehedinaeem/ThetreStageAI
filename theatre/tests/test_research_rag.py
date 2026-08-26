@@ -16,6 +16,7 @@ from theatre.services.research_service import (
     retrieve_for_research,
 )
 from theatre.services.retrieval.base import RetrievalResult
+from theatre.services.rag.modes import RAGMode
 
 
 def result(view: ViewType, source: str, score: float) -> RetrievalResult:
@@ -46,8 +47,11 @@ class RetrievalOnlyService:
             [result(ViewType.LIGHTING, "lighting_1", 0.79)],
         )
 
+    def retrieve_for_mode(self, query: str, **kwargs: Any) -> tuple[list[RetrievalResult], ...]:
+        return self.retrieve_sources(query, **kwargs)
+
     @staticmethod
-    def _require_results(*_: object) -> None:
+    def require_results_for_mode(*_: object) -> None:
         return None
 
 
@@ -82,6 +86,7 @@ class ResearchServiceTests(TestCase):
         self.assertEqual(selected[1][0].score, 0.82)
         self.assertEqual(capture.kwargs["research_query"], "পারিবারিক সংঘাত")
         self.assertEqual(capture.kwargs["retrieval_config"]["lighting_top_k"], 3)
+        self.assertEqual(capture.kwargs["rag_mode"], RAGMode.FULL_MULTIVIEW)
         self.assertEqual(outcome.project, project)
 
     def test_tampered_selection_is_rejected(self) -> None:
@@ -94,6 +99,7 @@ class ResearchRAGViewTests(TestCase):
     def test_page_displays_three_retrieval_columns(self, mocked_retrieve: Any) -> None:
         mocked_retrieve.return_value = ResearchRetrieval(
             query="সংঘাত",
+            rag_mode=RAGMode.FULL_MULTIVIEW,
             scene_results=[result(ViewType.SCENE, "scene_1", 0.91)],
             blocking_results=[result(ViewType.BLOCKING, "blocking_1", 0.82)],
             lighting_results=[result(ViewType.LIGHTING, "lighting_1", 0.79)],
@@ -105,6 +111,7 @@ class ResearchRAGViewTests(TestCase):
             {
                 "action": "retrieve", "query": "সংঘাত", "scene_top_k": 5,
                 "blocking_top_k": 3, "lighting_top_k": 3,
+                "combined_top_k": 11, "rag_mode": RAGMode.FULL_MULTIVIEW.value,
             },
         )
         self.assertContains(response, "Scene Retrieval")
@@ -113,6 +120,37 @@ class ResearchRAGViewTests(TestCase):
         self.assertContains(response, "scene_1")
         self.assertContains(response, "গবেষণা নাটক")
         self.assertContains(response, "Generate Using These Sources")
+        self.assertContains(response, "Full Multi-View RAG")
+        self.assertEqual(
+            mocked_retrieve.call_args.kwargs["rag_mode"],
+            RAGMode.FULL_MULTIVIEW.value,
+        )
+
+    @patch("theatre.views.retrieve_for_research")
+    def test_researcher_can_select_no_rag_mode(self, mocked_retrieve: Any) -> None:
+        mocked_retrieve.return_value = ResearchRetrieval(
+            query="সংঘাত", rag_mode=RAGMode.NO_RAG,
+            scene_results=[], blocking_results=[], lighting_results=[],
+            top_k={
+                "scene_top_k": 5, "blocking_top_k": 3,
+                "lighting_top_k": 3, "combined_top_k": 11,
+            },
+            selection_token="signed-no-rag",
+        )
+        response = self.client.post(
+            reverse("theatre:research_rag"),
+            {
+                "action": "retrieve", "query": "সংঘাত",
+                "rag_mode": RAGMode.NO_RAG.value,
+                "scene_top_k": 5, "blocking_top_k": 3,
+                "lighting_top_k": 3, "combined_top_k": 11,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Mode 1 — No RAG")
+        self.assertEqual(
+            mocked_retrieve.call_args.kwargs["rag_mode"], RAGMode.NO_RAG.value
+        )
 
     @patch("theatre.views.generate_from_research_selection")
     def test_generate_button_redirects_to_generated_project(self, mocked_generate: Any) -> None:

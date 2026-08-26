@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from django import forms
 
+from theatre.services.rag.modes import DEFAULT_RAG_MODE, RAGMode
+
 
 class ProductionBriefForm(forms.Form):
     story_idea = forms.CharField(
@@ -76,6 +78,12 @@ class ProductionBriefForm(forms.Form):
 
 
 class ResearchRAGForm(forms.Form):
+    rag_mode = forms.ChoiceField(
+        label="RAG mode",
+        choices=RAGMode.choices(),
+        initial=DEFAULT_RAG_MODE.value,
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
     query = forms.CharField(
         label="Research query",
         max_length=2_000,
@@ -97,5 +105,10 @@ class ResearchRAGForm(forms.Form):
     )
     lighting_top_k = forms.IntegerField(
         label="Lighting Top-K", min_value=1, max_value=20, initial=3,
+        widget=forms.NumberInput(attrs={"class": "form-control"}),
+    )
+    combined_top_k = forms.IntegerField(
+        label="Combined Top-K", min_value=1, max_value=50, initial=11,
+        help_text="Used only by Mode 5.",
         widget=forms.NumberInput(attrs={"class": "form-control"}),
     )
