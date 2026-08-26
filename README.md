@@ -118,4 +118,49 @@ reference sections and returns an IEEE-evaluation-friendly retrieval trace. Dupl
 sources are removed within each view, irrelevant metadata is excluded, and explicit
 production rules prohibit copying retrieved dialogue verbatim. Context construction
 does not call Ollama or any other language model.
+
+## Local Ollama and Qwen setup
+
+No paid API is required. On Linux, install Ollama using its official installer:
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+```
+
+Start the local server if it is not already running as a service:
+
+```bash
+ollama serve
+```
+
+In another terminal, download the configured Qwen model:
+
+```bash
+ollama pull qwen3:4b
+ollama list
+```
+
+Configure `.env`:
+
+```env
+THETRESTAGEAI_OLLAMA_URL=http://localhost:11434
+THETRESTAGEAI_LLM_MODEL=qwen3:4b
+THETRESTAGEAI_LLM_TIMEOUT_SECONDS=180
+```
+
+The local client uses Ollama's non-streaming structured-output endpoint. It passes
+the Pydantic JSON schema to Ollama and validates the returned JSON again locally.
+Connection failures, timeouts, unavailable models, malformed API envelopes, Markdown
+wrappers, invalid stage zones, and invalid cue values are rejected explicitly.
+
+Generated JSON passes through a second strict validation boundary before it can be
+used by any application or future hardware-control layer. Cross-record checks enforce
+unique dialogue and lighting IDs, known speakers and actors, and cue triggers that
+reference `scene_start`, `scene_end`, or a dialogue ID in the same scene. If initial
+validation fails, exactly one schema-constrained correction is requested from the
+configured local model. A second failure raises a controlled `ProductionValidationError`
+containing both sets of validation issues; no partially valid lighting data is returned.
+
+For macOS and Windows installers, use the official Ollama download page:
+<https://ollama.com/download>.
 # ThetreStageAI
