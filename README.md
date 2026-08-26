@@ -112,4 +112,10 @@ Scene retrieval returns five results, while blocking and lighting retrieval each
 return three. Application code may also pass exact-match metadata filters such as
 `theme`, `genre`, `scene_type`, `location`, `time`, `actors_count`, or `emotion` to
 an individual retriever.
+
+The `ContextBuilder` combines those result sets into size-bounded, clearly separated
+reference sections and returns an IEEE-evaluation-friendly retrieval trace. Duplicate
+sources are removed within each view, irrelevant metadata is excluded, and explicit
+production rules prohibit copying retrieved dialogue verbatim. Context construction
+does not call Ollama or any other language model.
 # ThetreStageAI
