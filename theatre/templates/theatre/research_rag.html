@@ -1,0 +1,41 @@
+{% extends "theatre/base.html" %}
+{% block title %}RAG Inspector · ThetreStageAI{% endblock %}
+{% block content %}
+<section class="page-header research-debug-header">
+  <div class="container">
+    <div class="eyebrow mb-3">Research transparency interface</div>
+    <h1 class="page-title">Multi-view RAG Inspector</h1>
+    <p class="text-secondary col-lg-8 mb-0">Inspect the exact scene, blocking, and lighting evidence returned by the local vector index. This interface is isolated from the normal production workflow.</p>
+  </div>
+</section>
+<section class="pb-5">
+  <div class="container-fluid research-container">
+    <form method="post" class="form-panel research-query-panel mb-4" data-loading-form novalidate>
+      {% csrf_token %}<input type="hidden" name="action" value="retrieve">
+      {% if pipeline_error %}<div class="alert error-panel" role="alert"><strong>Research operation failed.</strong><div>{{ pipeline_error }}</div>{% if error_code %}<small>Error reference: {{ error_code }}</small>{% endif %}</div>{% endif %}
+      <div class="row g-3 align-items-end">
+        <div class="col-xl-6">{% include "theatre/partials/form_field.html" with field=form.query %}</div>
+        <div class="col-4 col-xl-1">{% include "theatre/partials/form_field.html" with field=form.scene_top_k %}</div>
+        <div class="col-4 col-xl-1">{% include "theatre/partials/form_field.html" with field=form.blocking_top_k %}</div>
+        <div class="col-4 col-xl-1">{% include "theatre/partials/form_field.html" with field=form.lighting_top_k %}</div>
+        <div class="col-xl-3"><button class="btn btn-stage w-100" type="submit">Run Multi-View Retrieval</button></div>
+      </div>
+    </form>
+
+    {% if retrieval %}
+      <div class="research-selection-bar mb-4">
+        <div><span class="content-label d-block">Exact query</span><strong lang="bn">{{ retrieval.query }}</strong></div>
+        <div class="ms-lg-auto d-flex flex-wrap gap-2"><span class="meta-chip">Scene K={{ retrieval.top_k.scene_top_k }}</span><span class="meta-chip">Blocking K={{ retrieval.top_k.blocking_top_k }}</span><span class="meta-chip">Lighting K={{ retrieval.top_k.lighting_top_k }}</span></div>
+        <form method="post" data-loading-form>{% csrf_token %}<input type="hidden" name="action" value="generate"><input type="hidden" name="selection_token" value="{{ retrieval.selection_token }}"><button class="btn btn-stage" type="submit">Generate Using These Sources</button></form>
+      </div>
+      <div class="row g-3 research-columns">
+        <div class="col-xl-4"><section class="retrieval-column" aria-labelledby="scene-results-title"><div class="retrieval-column-heading"><h2 id="scene-results-title">Scene Retrieval</h2><span>{{ retrieval.scene_results|length }} results</span></div>{% include "theatre/partials/research_result_list.html" with results=retrieval.scene_results %}</section></div>
+        <div class="col-xl-4"><section class="retrieval-column" aria-labelledby="blocking-results-title"><div class="retrieval-column-heading"><h2 id="blocking-results-title">Blocking Retrieval</h2><span>{{ retrieval.blocking_results|length }} results</span></div>{% include "theatre/partials/research_result_list.html" with results=retrieval.blocking_results %}</section></div>
+        <div class="col-xl-4"><section class="retrieval-column" aria-labelledby="lighting-results-title"><div class="retrieval-column-heading"><h2 id="lighting-results-title">Lighting Retrieval</h2><span>{{ retrieval.lighting_results|length }} results</span></div>{% include "theatre/partials/research_result_list.html" with results=retrieval.lighting_results %}</section></div>
+      </div>
+    {% else %}
+      <div class="empty-inline research-empty">Submit a query to inspect independent retrieval evidence. No language model is called during this step.</div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

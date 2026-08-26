@@ -182,4 +182,16 @@ The Django view delegates orchestration to `theatre.services.production_service`
 Every accepted brief creates a project, successful runs store validated JSON and
 retrieval evidence, and failed runs retain controlled diagnostic evidence without
 exposing stack traces or unsafe lighting data to the UI.
+
+## Research evaluation
+
+The `evaluation` package defines the four comparison conditions, ranked retrieval
+metrics, objective generation measurements, append-only JSONL experiment storage,
+and CSV exports. Concrete system adapters must execute the real A/B/C/D pipelines
+and return `SystemRunOutput`; the runner never invents results or expert judgments.
+
+Use `export_expert_evaluation_csv(records, path)` to create the theatre-expert review
+sheet. All quality ratings and comments are deliberately blank until completed by
+human evaluators. `export_experiment_csv(records, path)` exports the objective run
+metadata separately.
 # ThetreStageAI

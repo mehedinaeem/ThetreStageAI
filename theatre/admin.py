@@ -41,6 +41,6 @@ class GenerationRunAdmin(admin.ModelAdmin):
         "created_at",
     )
     list_filter = ("validated", "model_name", "created_at")
-    search_fields = ("project__title", "model_name", "raw_output")
+    search_fields = ("project__title", "model_name", "research_query", "raw_output")
     readonly_fields = ("created_at",)
     list_select_related = ("project",)

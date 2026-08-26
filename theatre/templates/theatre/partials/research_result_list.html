@@ -1,0 +1,13 @@
+{% for result in results %}
+<article class="research-result-card">
+  <div class="result-rank" aria-label="Rank {{ result.rank }}">#{{ result.rank }}</div>
+  <div class="d-flex flex-wrap justify-content-between gap-2 mb-3"><code>{{ result.source_id }}</code><span class="score-badge">{{ result.score|floatformat:6 }}</span></div>
+  <dl class="research-result-meta">
+    <div><dt>Title</dt><dd>{{ result.metadata.title|default:"—" }}</dd></div>
+    <div><dt>Theme</dt><dd>{{ result.metadata.theme|default:"—" }}</dd></div>
+    <div><dt>Scene type</dt><dd>{{ result.metadata.scene_type|default:"—" }}</dd></div>
+    <div><dt>Emotion</dt><dd>{{ result.metadata.emotion|default:"—" }}</dd></div>
+  </dl>
+  <details class="search-text-preview"><summary>Search text</summary><p lang="bn">{{ result.search_text|truncatechars:360 }}</p></details>
+</article>
+{% empty %}<div class="empty-inline">No results returned.</div>{% endfor %}

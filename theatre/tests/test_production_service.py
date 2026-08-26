@@ -117,6 +117,24 @@ class ProductionServiceIntegrationTests(TestCase):
         self.assertEqual(outcome.run.retrieval_trace[0]["metadata"]["theme"], "সম্পর্ক")
         self.assertEqual([item.limits for item in retrievers], [[5], [3], [3]])
 
+    def test_research_generation_persists_exact_query_and_top_k(self) -> None:
+        pipeline, _ = service()
+        selected = (
+            [retrieval(ViewType.SCENE, 0)],
+            [retrieval(ViewType.BLOCKING, 1)],
+            [retrieval(ViewType.LIGHTING, 2)],
+        )
+        outcome = pipeline.generate_production(
+            request_data(),
+            retrieved_results=selected,
+            research_query="পরীক্ষামূলক সংঘাত",
+            retrieval_config={"scene_top_k": 1, "blocking_top_k": 1, "lighting_top_k": 1},
+        )
+        self.assertEqual(outcome.run.research_query, "পরীক্ষামূলক সংঘাত")
+        self.assertEqual(outcome.run.retrieval_config["scene_top_k"], 1)
+        self.assertEqual(outcome.run.scene_sources, ["natok_0"])
+        self.assertEqual(outcome.run.retrieval_trace[0]["score"], 0.95)
+
     def test_missing_index_is_controlled_and_recorded(self) -> None:
         pipeline, _ = service(exists=False)
         with self.assertRaises(ProductionServiceError) as captured:

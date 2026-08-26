@@ -73,3 +73,29 @@ class ProductionBriefForm(forms.Form):
                 f"Desired emotion: {data['desired_emotion']}",
             )
         )
+
+
+class ResearchRAGForm(forms.Form):
+    query = forms.CharField(
+        label="Research query",
+        max_length=2_000,
+        widget=forms.Textarea(
+            attrs={
+                "rows": 3,
+                "placeholder": "দুইজন চরিত্রের রাগপূর্ণ পারিবারিক সংঘাত",
+                "class": "form-control",
+            }
+        ),
+    )
+    scene_top_k = forms.IntegerField(
+        label="Scene Top-K", min_value=1, max_value=20, initial=5,
+        widget=forms.NumberInput(attrs={"class": "form-control"}),
+    )
+    blocking_top_k = forms.IntegerField(
+        label="Blocking Top-K", min_value=1, max_value=20, initial=3,
+        widget=forms.NumberInput(attrs={"class": "form-control"}),
+    )
+    lighting_top_k = forms.IntegerField(
+        label="Lighting Top-K", min_value=1, max_value=20, initial=3,
+        widget=forms.NumberInput(attrs={"class": "form-control"}),
+    )

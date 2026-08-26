@@ -66,25 +66,38 @@ class ProductionService:
     def __init__(self, dependencies: ProductionDependencies, *, model_name: str) -> None:
         self.dependencies = dependencies
         self.model_name = model_name
+        self._research_query = ""
+        self._retrieval_config: dict[str, int] = {}
 
-    def generate_production(self, request_data: dict[str, Any]) -> ProductionOutcome:
+    def generate_production(
+        self,
+        request_data: dict[str, Any],
+        *,
+        retrieved_results: tuple[
+            list[RetrievalResult], list[RetrievalResult], list[RetrievalResult]
+        ] | None = None,
+        research_query: str = "",
+        retrieval_config: dict[str, int] | None = None,
+    ) -> ProductionOutcome:
+        self._research_query = research_query
+        self._retrieval_config = dict(
+            retrieval_config
+            or ({"scene_top_k": 5, "blocking_top_k": 3, "lighting_top_k": 3}
+                if retrieved_results is None else {})
+        )
         project = self._create_project(request_data)
         started = perf_counter()
         scene_results: list[RetrievalResult] = []
         blocking_results: list[RetrievalResult] = []
         lighting_results: list[RetrievalResult] = []
         try:
-            self._require_index()
             prompt = project.user_prompt
-            try:
-                scene_results = self.dependencies.scene_retriever.retrieve(prompt, limit=5)
-                blocking_results = self.dependencies.blocking_retriever.retrieve(prompt, limit=3)
-                lighting_results = self.dependencies.lighting_retriever.retrieve(prompt, limit=3)
-            except Exception as exc:
-                raise ProductionServiceError(
-                    "qdrant_unavailable",
-                    "The local retrieval index could not be queried. Ensure Qdrant storage is available and rebuild the index if necessary.",
-                ) from exc
+            if retrieved_results is None:
+                scene_results, blocking_results, lighting_results = self.retrieve_sources(
+                    prompt, scene_top_k=5, blocking_top_k=3, lighting_top_k=3
+                )
+            else:
+                scene_results, blocking_results, lighting_results = retrieved_results
             self._require_results(scene_results, blocking_results, lighting_results)
             generation = self.dependencies.generator.generate(
                 prompt,
@@ -160,9 +173,32 @@ class ProductionService:
                 validated=True,
                 validation_errors=generation.validation_errors,
                 generation_time_seconds=elapsed,
+                research_query=self._research_query,
+                retrieval_config=self._retrieval_config,
             )
         logger.info("Generated and saved project %s in %.3f seconds", project.pk, elapsed)
         return ProductionOutcome(project=project, run=run)
+
+    def retrieve_sources(
+        self,
+        query: str,
+        *,
+        scene_top_k: int,
+        blocking_top_k: int,
+        lighting_top_k: int,
+    ) -> tuple[list[RetrievalResult], list[RetrievalResult], list[RetrievalResult]]:
+        self._require_index()
+        try:
+            return (
+                self.dependencies.scene_retriever.retrieve(query, limit=scene_top_k),
+                self.dependencies.blocking_retriever.retrieve(query, limit=blocking_top_k),
+                self.dependencies.lighting_retriever.retrieve(query, limit=lighting_top_k),
+            )
+        except Exception as exc:
+            raise ProductionServiceError(
+                "qdrant_unavailable",
+                "The local retrieval index could not be queried. Ensure Qdrant storage is available and rebuild the index if necessary.",
+            ) from exc
 
     def _create_project(self, data: dict[str, Any]) -> TheatreProject:
         story = str(data["story_idea"]).strip()
@@ -226,6 +262,8 @@ class ProductionService:
             lighting_sources=self._source_ids(lighting), retrieval_trace=trace,
             raw_output=raw_output, validated=False, validation_errors=errors,
             generation_time_seconds=perf_counter() - started,
+            research_query=self._research_query,
+            retrieval_config=self._retrieval_config,
         )
 
     @staticmethod

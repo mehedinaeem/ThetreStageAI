@@ -7,13 +7,15 @@ from collections import defaultdict
 from typing import Any
 
 from django.http import HttpRequest, HttpResponse
+from django.core import signing
 from django.shortcuts import get_object_or_404, redirect, render
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
-from .forms import ProductionBriefForm
+from .forms import ProductionBriefForm, ResearchRAGForm
 from .models import GenerationRun, TheatreProject
 from .services.production_service import ProductionServiceError, generate_production
+from .services.research_service import generate_from_research_selection, retrieve_for_research
 
 
 def home(request: HttpRequest) -> HttpResponse:
@@ -93,6 +95,37 @@ def rag_sources(request: HttpRequest, pk: int | None = None) -> HttpResponse:
 
 def research_about(request: HttpRequest) -> HttpResponse:
     return render(request, "theatre/research_about.html")
+
+
+def research_rag(request: HttpRequest) -> HttpResponse:
+    form = ResearchRAGForm(request.POST if request.method == "POST" else None)
+    context: dict[str, Any] = {"form": form}
+    if request.method == "POST" and request.POST.get("action") == "generate":
+        try:
+            outcome = generate_from_research_selection(request.POST.get("selection_token", ""))
+        except signing.BadSignature:
+            context["pipeline_error"] = (
+                "The signed retrieval selection is invalid or expired. Run the retrieval again."
+            )
+            return render(request, "theatre/research_rag.html", context, status=400)
+        except ProductionServiceError as exc:
+            context.update(pipeline_error=exc.user_message, error_code=exc.code)
+            return render(request, "theatre/research_rag.html", context, status=503)
+        return redirect("theatre:production_detail", pk=outcome.project.pk)
+
+    if request.method == "POST" and form.is_valid():
+        try:
+            retrieval = retrieve_for_research(
+                form.cleaned_data["query"],
+                scene_top_k=form.cleaned_data["scene_top_k"],
+                blocking_top_k=form.cleaned_data["blocking_top_k"],
+                lighting_top_k=form.cleaned_data["lighting_top_k"],
+            )
+        except ProductionServiceError as exc:
+            context.update(pipeline_error=exc.user_message, error_code=exc.code)
+            return render(request, "theatre/research_rag.html", context, status=503)
+        context["retrieval"] = retrieval
+    return render(request, "theatre/research_rag.html", context)
 
 
 def _group_sources(trace: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:

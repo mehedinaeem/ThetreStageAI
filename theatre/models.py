@@ -81,6 +81,15 @@ class GenerationRun(models.Model):
         blank=True,
         help_text="Ranks, similarity scores, source IDs, and view types for reproducibility.",
     )
+    research_query = models.TextField(
+        blank=True,
+        help_text="Exact researcher query used for this run, when applicable.",
+    )
+    retrieval_config = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Selected per-view Top-K configuration for reproducibility.",
+    )
     raw_output = models.TextField(blank=True)
     validated = models.BooleanField(default=False, db_index=True)
     validation_errors = models.JSONField(default=list, blank=True)
