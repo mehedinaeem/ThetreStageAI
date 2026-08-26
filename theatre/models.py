@@ -105,6 +105,11 @@ class GenerationRun(models.Model):
         help_text="Retrieval ablation mode used for this generation run.",
     )
     raw_output = models.TextField(blank=True)
+    generated_json = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Validated production snapshot for this specific run.",
+    )
     validated = models.BooleanField(default=False, db_index=True)
     validation_errors = models.JSONField(default=list, blank=True)
     generation_time_seconds = models.FloatField(

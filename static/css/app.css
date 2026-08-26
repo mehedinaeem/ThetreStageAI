@@ -34,6 +34,7 @@ a { color:var(--stage-amber-soft); } a:hover { color:#ffe0ad; }
 .production-tabs .nav-link { border:0; border-bottom:2px solid transparent; border-radius:0; color:var(--stage-muted); padding:1rem 1.2rem; white-space:nowrap; text-transform:uppercase; font-size:.78rem; letter-spacing:.08em; }
 .production-tabs .nav-link.active { color:var(--stage-text); background:transparent; border-color:var(--stage-amber); } .production-content { padding-top:2rem; }
 .meta-chip,.zone-badge,.score-badge { display:inline-flex; align-items:center; border:1px solid #3a404b; background:#15181e; color:#cdd1d7; padding:.25rem .55rem; border-radius:999px; font-size:.76rem; } .success-chip { border-color:#486b56; color:#bce6c8; background:#12251a; }
+.invalid-chip { border-color:#74413d; color:#ffd5d1; background:#321b1b; }
 .scene-block+.scene-block { margin-top:4rem; padding-top:3rem; border-top:1px solid var(--stage-border); } .scene-heading { display:flex; gap:1rem; align-items:flex-start; }
 .scene-heading h2,.table-scene-title { font-size:1.35rem; margin:0; } .scene-heading p { color:var(--stage-muted); }
 .scene-number { font-family:ui-monospace,monospace; color:var(--stage-amber); border:1px solid #5d482c; padding:.3rem .5rem; }
@@ -50,6 +51,23 @@ code { color:var(--stage-amber-soft); }
 .json-panel { border:1px solid var(--stage-border); background:#08090b; } .json-panel summary { cursor:pointer; padding:1rem; color:var(--stage-amber-soft); } .json-panel pre { margin:0; padding:1.5rem; border-top:1px solid var(--stage-border); max-height:65vh; overflow:auto; white-space:pre-wrap; }
 .empty-state { max-width:720px; margin:2rem auto; text-align:center; border:1px dashed #353b46; padding:clamp(2rem,7vw,5rem); background:var(--stage-surface); } .empty-state p { color:var(--stage-muted); } .empty-icon { color:var(--stage-amber); font-size:3rem; }
 .history-list { border-top:1px solid var(--stage-border); } .history-card { padding:2rem 0; border-bottom:1px solid var(--stage-border); } .history-card h2 { font-size:1.3rem; } .history-card h2 a { color:var(--stage-text); text-decoration:none; } .history-card h2 a:hover { color:var(--stage-amber-soft); } .history-label { display:block; margin-bottom:.25rem; }
+.history-table-shell { border:1px solid var(--stage-border); background:var(--stage-surface); }
+.history-table { min-width:1080px; margin:0; }
+.history-table td { white-space:nowrap; }
+.history-project-link { display:inline-block; max-width:20rem; color:var(--stage-text); font-weight:700; overflow:hidden; text-overflow:ellipsis; text-decoration:none; vertical-align:middle; }
+.history-project-link:hover { color:var(--stage-amber-soft); }
+.comparison-container { max-width:1800px; padding-left:clamp(.75rem,2vw,2rem); padding-right:clamp(.75rem,2vw,2rem); }
+.comparison-form { padding:1.5rem; }
+.comparison-summary,.comparison-column { border:1px solid var(--stage-border); background:var(--stage-surface); padding:1.25rem; }
+.comparison-summary h2 { font-size:1.25rem; }
+.comparison-metadata { margin:1rem 0; }
+.comparison-metadata>div { display:flex; justify-content:space-between; gap:1rem; padding:.55rem 0; border-top:1px solid #272c35; }
+.comparison-metadata dt { color:var(--stage-muted); font-weight:500; }
+.comparison-metadata dd { margin:0; text-align:right; overflow-wrap:anywhere; }
+.comparison-run-heading { font-size:1rem; text-transform:uppercase; letter-spacing:.08em; color:var(--stage-amber-soft); margin-bottom:1.5rem; }
+.comparison-scene+.comparison-scene { margin-top:2.5rem; padding-top:2rem; border-top:1px solid var(--stage-border); }
+.comparison-scene h3 { font-size:1.15rem; }
+.status-metadata { max-width:42rem; }
 .research-note { display:flex; flex-wrap:wrap; gap:.6rem 1rem; border:1px solid var(--stage-border); background:var(--stage-surface); padding:1rem; font-size:.85rem; } .research-note span { color:var(--stage-muted); }
 .architecture-flow { display:flex; align-items:center; flex-wrap:wrap; gap:.6rem; margin-top:2rem; } .architecture-flow span { border:1px solid #3a404b; padding:.55rem .7rem; background:#0c0e12; font-size:.82rem; } .architecture-flow i { color:var(--stage-amber); font-style:normal; }
 .principle-list { padding-left:1.2rem; color:#c6cad1; } .principle-list li { margin-bottom:.65rem; } .metric-card { display:flex; flex-direction:column; } .metric-card strong { font-size:2.2rem; color:var(--stage-amber-soft); } .metric-card span { color:var(--stage-muted); }

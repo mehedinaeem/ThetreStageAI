@@ -25,10 +25,12 @@ class FrontendPageTests(TestCase):
                 }],
             },
         )
-        GenerationRun.objects.create(
+        self.run = GenerationRun.objects.create(
             project=self.project, model_name="qwen3:4b", scene_sources=["natok_001"],
             retrieval_trace=[{"source_id": "natok_001", "view_type": "scene", "rank": 1, "score": 0.91, "metadata": {"theme": "সম্পর্ক", "scene_type": "confrontation"}}],
-            raw_output="{}", validated=True, validation_errors=[], generation_time_seconds=4.2,
+            raw_output="{}", generated_json=self.project.generated_json,
+            validated=True, validation_errors=[], generation_time_seconds=4.2,
+            rag_mode="full_multiview",
         )
 
     def test_all_public_pages_render(self) -> None:
@@ -38,6 +40,7 @@ class FrontendPageTests(TestCase):
             reverse("theatre:project_history"), reverse("theatre:rag_sources"),
             reverse("theatre:project_rag_sources", args=[self.project.pk]),
             reverse("theatre:research_about"),
+            reverse("theatre:compare_generations"),
         )
         for url in urls:
             with self.subTest(url=url):
@@ -73,3 +76,61 @@ class FrontendPageTests(TestCase):
         response = self.client.post(reverse("theatre:new_production"), {})
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'class="field-error"', html=False)
+
+    def test_history_lists_research_run_metadata_and_open_link(self) -> None:
+        response = self.client.get(reverse("theatre:project_history"))
+
+        self.assertContains(response, "আলোর ওপারে")
+        self.assertContains(response, "সম্পর্ক")
+        self.assertContains(response, "qwen3:4b")
+        self.assertContains(response, "Full Multi-View RAG")
+        self.assertContains(response, "Validated")
+        self.assertContains(
+            response, reverse("theatre:production_detail", args=[self.project.pk])
+        )
+
+    def test_two_generation_runs_can_be_compared_side_by_side(self) -> None:
+        other_project = TheatreProject.objects.create(
+            title="অন্য আলো", user_prompt="brief", theme="স্মৃতি", genre="tragedy",
+            actor_count=1, duration_minutes=10, generated_json=self.project.generated_json,
+        )
+        other_json = {
+            **self.project.generated_json,
+            "title": "অন্য আলো",
+            "scenes": [{
+                **self.project.generated_json["scenes"][0],
+                "dialogue": [{"id": "D01", "speaker": "মায়া", "text": "অন্য সংলাপ।"}],
+            }],
+        }
+        other_run = GenerationRun.objects.create(
+            project=other_project, model_name="qwen3:8b", generated_json=other_json,
+            scene_sources=["natok_002"],
+            retrieval_trace=[{
+                "source_id": "natok_002", "view_type": "scene",
+                "rank": 1, "score": 0.87, "metadata": {"theme": "স্মৃতি"},
+            }],
+            validated=False, validation_errors=[{"code": "test"}],
+            generation_time_seconds=7.5, rag_mode="scene_only",
+        )
+
+        response = self.client.get(
+            reverse("theatre:compare_generations"),
+            {"run_a": self.run.pk, "run_b": other_run.pk},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "ফিরে এসো।")
+        self.assertContains(response, "অন্য সংলাপ।")
+        self.assertContains(response, "natok_001")
+        self.assertContains(response, "natok_002")
+        self.assertContains(response, "4.200 seconds")
+        self.assertContains(response, "7.500 seconds")
+        self.assertContains(response, "Scene-only RAG")
+        self.assertNotContains(response, "Overall score")
+
+    def test_comparison_rejects_the_same_run_twice(self) -> None:
+        response = self.client.get(
+            reverse("theatre:compare_generations"),
+            {"run_a": self.run.pk, "run_b": self.run.pk},
+        )
+        self.assertContains(response, "Select two different generation runs")

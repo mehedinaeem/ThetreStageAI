@@ -113,6 +113,7 @@ class ProductionServiceIntegrationTests(TestCase):
         outcome.project.refresh_from_db()
         self.assertEqual(outcome.project.generated_json["title"], "শেষ কথা")
         self.assertTrue(outcome.run.validated)
+        self.assertEqual(outcome.run.generated_json["title"], "শেষ কথা")
         self.assertEqual(len(outcome.run.scene_sources), 5)
         self.assertEqual(len(outcome.run.blocking_sources), 3)
         self.assertEqual(len(outcome.run.lighting_sources), 3)

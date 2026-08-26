@@ -190,6 +190,7 @@ class ProductionService:
                     [*scene_results, *blocking_results, *lighting_results],
                 ),
                 raw_output=generation.raw_output,
+                generated_json=generation.production.model_dump(mode="json", by_alias=True),
                 validated=True,
                 validation_errors=generation.validation_errors,
                 generation_time_seconds=elapsed,

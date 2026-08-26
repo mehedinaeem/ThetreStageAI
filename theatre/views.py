@@ -8,11 +8,12 @@ from typing import Any
 
 from django.http import HttpRequest, HttpResponse
 from django.core import signing
+from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404, redirect, render
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
-from .forms import ProductionBriefForm, ResearchRAGForm
+from .forms import GenerationComparisonForm, ProductionBriefForm, ResearchRAGForm
 from .models import GenerationRun, TheatreProject
 from .services.production_service import ProductionServiceError, generate_production
 from .services.research_service import generate_from_research_selection, retrieve_for_research
@@ -71,8 +72,26 @@ def production_detail(request: HttpRequest, pk: int) -> HttpResponse:
 
 
 def project_history(request: HttpRequest) -> HttpResponse:
-    projects = TheatreProject.objects.prefetch_related("generation_runs").all()
+    latest_runs = GenerationRun.objects.order_by("-created_at")
+    projects = TheatreProject.objects.prefetch_related(
+        Prefetch("generation_runs", queryset=latest_runs, to_attr="history_runs")
+    ).all()
     return render(request, "theatre/project_history.html", {"projects": projects})
+
+
+def compare_generations(request: HttpRequest) -> HttpResponse:
+    form = GenerationComparisonForm(request.GET or None)
+    comparisons: list[dict[str, Any]] = []
+    if form.is_valid():
+        comparisons = [
+            _comparison_payload(form.cleaned_data["run_a"]),
+            _comparison_payload(form.cleaned_data["run_b"]),
+        ]
+    return render(
+        request,
+        "theatre/generation_comparison.html",
+        {"form": form, "comparisons": comparisons},
+    )
 
 
 def rag_sources(request: HttpRequest, pk: int | None = None) -> HttpResponse:
@@ -141,6 +160,20 @@ def _group_sources(trace: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]
     for results in grouped.values():
         results.sort(key=lambda item: (item.get("rank", 10_000), -item.get("score", 0)))
     return dict(grouped)
+
+
+def _comparison_payload(run: GenerationRun) -> dict[str, Any]:
+    production = copy.deepcopy(run.generated_json) if run.generated_json else {}
+    for scene in production.get("scenes", []):
+        for cue in scene.get("lighting", []):
+            rgb = cue.get("rgb", [])
+            if isinstance(rgb, list) and len(rgb) == 3:
+                cue["rgb_css"] = ", ".join(str(value) for value in rgb)
+    return {
+        "run": run,
+        "production": production,
+        "sources": _group_sources(run.retrieval_trace),
+    }
 
 
 @api_view(["GET"])

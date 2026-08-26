@@ -3,7 +3,16 @@ from __future__ import annotations
 
 from django import forms
 
+from theatre.models import GenerationRun
 from theatre.services.rag.modes import DEFAULT_RAG_MODE, RAGMode
+
+
+def _generation_run_label(run: GenerationRun) -> str:
+    status = "validated" if run.validated else "invalid"
+    return (
+        f"Run #{run.pk} · {run.project.title} · "
+        f"{run.get_rag_mode_display()} · {status}"
+    )
 
 
 class ProductionBriefForm(forms.Form):
@@ -112,3 +121,26 @@ class ResearchRAGForm(forms.Form):
         help_text="Used only by Mode 5.",
         widget=forms.NumberInput(attrs={"class": "form-control"}),
     )
+
+
+class GenerationComparisonForm(forms.Form):
+    run_a = forms.ModelChoiceField(
+        label="First generation run", queryset=GenerationRun.objects.none()
+    )
+    run_b = forms.ModelChoiceField(
+        label="Second generation run", queryset=GenerationRun.objects.none()
+    )
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        super().__init__(*args, **kwargs)
+        runs = GenerationRun.objects.select_related("project").order_by("-created_at")
+        for field in self.fields.values():
+            field.queryset = runs
+            field.widget.attrs["class"] = "form-select"
+            field.label_from_instance = _generation_run_label
+
+    def clean(self) -> dict[str, object]:
+        cleaned = super().clean()
+        if cleaned.get("run_a") == cleaned.get("run_b") and cleaned.get("run_a"):
+            raise forms.ValidationError("Select two different generation runs.")
+        return cleaned
