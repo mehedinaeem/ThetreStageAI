@@ -6,15 +6,22 @@ import json
 from collections import defaultdict
 from typing import Any
 
-from django.http import HttpRequest, HttpResponse
 from django.core import signing
 from django.db.models import Prefetch
+from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from pydantic import ValidationError
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from .forms import GenerationComparisonForm, ProductionBriefForm, ResearchRAGForm
 from .models import GenerationRun, TheatreProject
+from .services.export_service import (
+    export_blocking_csv,
+    export_json,
+    export_lighting_csv,
+    export_script_txt,
+)
 from .services.production_service import ProductionServiceError, generate_production
 from .services.research_service import generate_from_research_selection, retrieve_for_research
 
@@ -69,6 +76,40 @@ def production_detail(request: HttpRequest, pk: int) -> HttpResponse:
             "raw_json": json.dumps(project.generated_json, ensure_ascii=False, indent=2),
         },
     )
+
+
+def export_production(request: HttpRequest, pk: int, export_format: str) -> HttpResponse:
+    project = get_object_or_404(TheatreProject, pk=pk)
+    if not project.generated_json:
+        raise Http404("No validated production is available for export.")
+    exporters = {
+        "json": (export_json, "application/json; charset=utf-8", "production.json"),
+        "txt": (export_script_txt, "text/plain; charset=utf-8", "script.txt"),
+        "blocking.csv": (
+            export_blocking_csv, "text/csv; charset=utf-8", "blocking.csv"
+        ),
+        "lighting.csv": (
+            export_lighting_csv, "text/csv; charset=utf-8", "lighting.csv"
+        ),
+    }
+    selected = exporters.get(export_format)
+    if selected is None:
+        raise Http404("Unsupported export format.")
+    exporter, content_type, suffix = selected
+    try:
+        content = exporter(project.generated_json)
+    except ValidationError:
+        return HttpResponse(
+            "The stored production is not valid and cannot be exported.",
+            status=422,
+            content_type="text/plain; charset=utf-8",
+        )
+    response = HttpResponse(content, content_type=content_type)
+    response["Content-Disposition"] = (
+        f'attachment; filename="thetrestageai-project-{project.pk}-{suffix}"'
+    )
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 def project_history(request: HttpRequest) -> HttpResponse:

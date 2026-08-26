@@ -8,6 +8,11 @@ urlpatterns = [
     path("", views.home, name="home"),
     path("productions/new/", views.new_production, name="new_production"),
     path("productions/<int:pk>/", views.production_detail, name="production_detail"),
+    path(
+        "productions/<int:pk>/export/<str:export_format>/",
+        views.export_production,
+        name="export_production",
+    ),
     path("projects/", views.project_history, name="project_history"),
     path("research/compare/", views.compare_generations, name="compare_generations"),
     path("rag-sources/", views.rag_sources, name="rag_sources"),
