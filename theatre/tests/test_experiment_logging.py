@@ -18,7 +18,8 @@ class ExperimentLoggingTests(TestCase):
             model_name="qwen3:4b",
             model_settings={
                 "provider": "ollama", "temperature": 0.2,
-                "timeout_seconds": 180, "api_key": "never-log-this",
+                "timeout_seconds": 180, "num_predict": 4096,
+                "api_key": "never-log-this",
                 "base_url": "http://user:password@localhost",
             },
             user_input="পারিবারিক সংঘাত token=super-secret",
@@ -50,6 +51,7 @@ class ExperimentLoggingTests(TestCase):
         self.assertEqual(payload["generation_run_id"], run.pk)
         self.assertEqual(payload["model"], "qwen3:4b")
         self.assertEqual(payload["model_settings"]["temperature"], 0.2)
+        self.assertEqual(payload["model_settings"]["num_predict"], 4096)
         self.assertEqual(payload["rag_mode"], "scene_only")
         self.assertEqual(payload["top_k"]["scene"], 5)
         self.assertEqual(payload["retrieval"]["scene"][0]["source_id"], "natok_1")

@@ -54,6 +54,8 @@ class OllamaClientTests(SimpleTestCase):
         self.assertFalse(body["stream"])
         self.assertFalse(body["think"])
         self.assertEqual(body["format"], {"type": "object"})
+        self.assertEqual(body["options"]["temperature"], 0.2)
+        self.assertEqual(body["options"]["num_predict"], 4096)
         self.assertEqual(mocked_urlopen.call_args.kwargs["timeout"], 5)
 
     @patch("theatre.services.llm.client.urlopen", side_effect=URLError("refused"))

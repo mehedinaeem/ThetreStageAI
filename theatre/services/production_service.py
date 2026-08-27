@@ -3,21 +3,31 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from functools import lru_cache
 from time import perf_counter
 from typing import Any, Protocol
 
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from django.db import transaction
 
 from theatre.models import GenerationRun, TheatreProject
 from theatre.services.data.schemas import ViewType
 from theatre.services.llm import (
+    GeminiAPIError,
+    GeminiAuthenticationError,
+    GeminiBadRequestError,
+    GeminiConfigurationError,
+    GeminiInvalidResponseError,
+    GeminiNetworkError,
+    GeminiRateLimitError,
+    GeminiUnavailableError,
     InvalidLLMResponseError,
     LLMConnectionError,
     LLMTimeoutError,
     ModelUnavailableError,
-    OllamaClient,
     TheatreGenerator,
+    create_provider,
 )
 from theatre.services.rag import (
     COLLECTION_BY_VIEW,
@@ -29,7 +39,7 @@ from theatre.services.rag import (
 )
 from theatre.services.retrieval import BlockingRetriever, LightingRetriever, SceneRetriever
 from theatre.services.retrieval.base import RetrievalResult
-from theatre.services.validation import ProductionValidationError
+from theatre.services.validation import ProductionValidationError, make_json_safe
 from theatre.services.experiment_logging import (
     log_generation_run,
     safe_model_settings,
@@ -105,10 +115,10 @@ class ProductionService:
             raise ValueError(f"Unsupported RAG mode: {rag_mode}") from exc
         self._research_query = research_query
         default_config = {
-            "scene_top_k": 5,
-            "blocking_top_k": 3,
-            "lighting_top_k": 3,
-            "combined_top_k": 11,
+            "scene_top_k": 3,
+            "blocking_top_k": 2,
+            "lighting_top_k": 2,
+            "combined_top_k": 7,
         }
         if retrieved_results is None:
             self._retrieval_config = default_config | dict(retrieval_config or {})
@@ -132,10 +142,10 @@ class ProductionService:
                 scene_results, blocking_results, lighting_results = self.retrieve_for_mode(
                     prompt,
                     mode=self._rag_mode,
-                    scene_top_k=self._retrieval_config.get("scene_top_k", 5),
-                    blocking_top_k=self._retrieval_config.get("blocking_top_k", 3),
-                    lighting_top_k=self._retrieval_config.get("lighting_top_k", 3),
-                    combined_top_k=self._retrieval_config.get("combined_top_k", 11),
+                    scene_top_k=self._retrieval_config.get("scene_top_k", 3),
+                    blocking_top_k=self._retrieval_config.get("blocking_top_k", 2),
+                    lighting_top_k=self._retrieval_config.get("lighting_top_k", 2),
+                    combined_top_k=self._retrieval_config.get("combined_top_k", 7),
                 )
             else:
                 scene_results, blocking_results, lighting_results = retrieved_results
@@ -147,6 +157,18 @@ class ProductionService:
                 scene_results,
                 blocking_results,
                 lighting_results,
+                constraints={
+                    "story_idea": request_data.get("story_idea"),
+                    "theme": project.theme,
+                    "genre": project.genre,
+                    "language": project.language,
+                    "actor_count": project.actor_count,
+                    "duration_minutes": project.duration_minutes,
+                    "stage_size": project.stage_size,
+                    "available_lights": project.available_lights,
+                    "scene_time": request_data.get("scene_time"),
+                    "desired_emotion": request_data.get("desired_emotion"),
+                },
             )
         except ProductionServiceError as exc:
             self._record_failure(
@@ -156,20 +178,78 @@ class ProductionService:
             exc.project = project
             raise
         except (LLMTimeoutError,) as exc:
+            if self.model_settings.get("provider") == "gemini":
+                code = "gemini_timeout"
+                message = "Gemini timed out. Please retry the request."
+            else:
+                code = "ollama_timeout"
+                message = "The local model timed out. Try a shorter brief or increase the configured timeout."
             self._fail(project, started, scene_results, blocking_results, lighting_results,
-                       "ollama_timeout", "The local model timed out. Try a shorter brief or increase the configured timeout.", exc)
+                       code, message, exc)
         except (ModelUnavailableError,) as exc:
             self._fail(project, started, scene_results, blocking_results, lighting_results,
                        "model_unavailable", f"The configured Qwen model is unavailable. Run: ollama pull {self.model_name}", exc)
         except (LLMConnectionError,) as exc:
+            if isinstance(exc, GeminiNetworkError):
+                code = "gemini_network_error"
+                message = "Gemini could not be reached because of a network transport error."
+            else:
+                code = "ollama_unavailable"
+                message = "Ollama is not reachable. Start it with 'ollama serve' and try again."
             self._fail(project, started, scene_results, blocking_results, lighting_results,
-                       "ollama_unavailable", "Ollama is not reachable. Start it with 'ollama serve' and try again.", exc)
+                       code, message, exc)
+        except GeminiConfigurationError as exc:
+            self._fail(project, started, scene_results, blocking_results, lighting_results,
+                       "gemini_configuration_error", "Gemini is not configured. Add GEMINI_API_KEY to the local .env file.", exc)
+        except GeminiAuthenticationError as exc:
+            self._fail(project, started, scene_results, blocking_results, lighting_results,
+                       "gemini_auth_error", "Gemini rejected the configured API key. Check the local Gemini configuration.", exc)
+        except GeminiRateLimitError as exc:
+            self._fail(project, started, scene_results, blocking_results, lighting_results,
+                       "gemini_rate_limit", "The Gemini free-tier request limit was reached. Please retry later.", exc)
+        except GeminiBadRequestError as exc:
+            self._fail(project, started, scene_results, blocking_results, lighting_results,
+                       "gemini_bad_request", "Gemini rejected the structured generation request. Please check the generation schema.", exc)
+        except GeminiUnavailableError as exc:
+            self._fail(project, started, scene_results, blocking_results, lighting_results,
+                       "gemini_unavailable", "Gemini is temporarily unavailable. Please retry later.", exc)
+        except GeminiInvalidResponseError as exc:
+            self._fail(project, started, scene_results, blocking_results, lighting_results,
+                       "gemini_invalid_response", "Gemini returned an unreadable structured response. Please retry.", exc)
+        except GeminiAPIError as exc:
+            self._fail(project, started, scene_results, blocking_results, lighting_results,
+                       "gemini_api_error", "Gemini is temporarily unavailable. Please retry later.", exc)
         except ProductionValidationError as exc:
-            errors = [*exc.initial_errors, *exc.final_errors]
+            errors = exc.final_errors or exc.initial_errors
             cause = exc.__cause__
             if isinstance(cause, LLMTimeoutError):
-                code = "ollama_timeout"
-                user_message = "The local model timed out during its single validation repair attempt."
+                if self.model_settings.get("provider") == "gemini":
+                    code = "gemini_timeout"
+                    user_message = "Gemini timed out during its single validation repair attempt."
+                else:
+                    code = "ollama_timeout"
+                    user_message = "The local model timed out during its single validation repair attempt."
+            elif isinstance(cause, GeminiAuthenticationError):
+                code = "gemini_auth_error"
+                user_message = "Gemini rejected the configured API key during repair."
+            elif isinstance(cause, GeminiRateLimitError):
+                code = "gemini_rate_limit"
+                user_message = "The Gemini free-tier request limit was reached during repair. Please retry later."
+            elif isinstance(cause, GeminiBadRequestError):
+                code = "gemini_bad_request"
+                user_message = "Gemini rejected the structured validation repair request."
+            elif isinstance(cause, GeminiUnavailableError):
+                code = "gemini_unavailable"
+                user_message = "Gemini became temporarily unavailable during repair."
+            elif isinstance(cause, GeminiNetworkError):
+                code = "gemini_network_error"
+                user_message = "Gemini encountered a network transport error during repair."
+            elif isinstance(cause, GeminiInvalidResponseError):
+                code = "gemini_invalid_response"
+                user_message = "Gemini returned an unreadable structured repair response."
+            elif isinstance(cause, GeminiAPIError):
+                code = "gemini_api_error"
+                user_message = "Gemini became unavailable during the validation repair attempt."
             elif isinstance(cause, ModelUnavailableError):
                 code = "model_unavailable"
                 user_message = f"The configured Qwen model is unavailable. Run: ollama pull {self.model_name}"
@@ -183,6 +263,10 @@ class ProductionService:
                 project, started, scene_results, blocking_results, lighting_results,
                 code=code, message=str(exc),
                 validation_errors=errors,
+                validation_history={
+                    "initial": exc.initial_errors,
+                    "final": exc.final_errors,
+                },
                 raw_output=exc.corrected_output or exc.initial_output,
                 repair_attempts=1,
             )
@@ -222,7 +306,8 @@ class ProductionService:
                 raw_output=generation.raw_output,
                 generated_json=generation.production.model_dump(mode="json", by_alias=True),
                 validated=True,
-                validation_errors=generation.validation_errors,
+                validation_errors=make_json_safe(generation.validation_errors),
+                validation_history=make_json_safe(generation.validation_history),
                 repair_attempts=1 if generation.repaired else 0,
                 generation_time_seconds=elapsed,
                 research_query=self._research_query,
@@ -320,17 +405,38 @@ class ProductionService:
 
     def _create_project(self, data: dict[str, Any]) -> TheatreProject:
         story = str(data["story_idea"]).strip()
+        raw_lights = data.get("available_lights")
+        if raw_lights is None:
+            light_items: list[Any] = []
+        elif isinstance(raw_lights, str):
+            normalized_lights = raw_lights.replace("\r\n", "\n").replace("\r", "\n")
+            light_items = normalized_lights.replace("\n", ",").split(",")
+        elif isinstance(raw_lights, (list, tuple, set)):
+            light_items = list(raw_lights)
+        else:
+            light_items = [raw_lights]
+
+        lights = [str(item).strip() for item in light_items if str(item).strip()]
+        lights_display = ", ".join(lights) if lights else "None specified"
         complete_prompt = "\n".join(
-            (story, f"Scene time: {data['scene_time']}", f"Desired emotion: {data['desired_emotion']}")
+            (
+                f"Story idea: {story}",
+                f"Theme: {str(data.get('theme', '')).strip()}",
+                f"Genre: {str(data.get('genre', '')).strip()}",
+                f"Language: {str(data.get('language', '')).strip()}",
+                f"Number of actors: {data.get('actor_count', '')}",
+                f"Target duration: {data.get('duration_minutes', '')} minutes",
+                f"Stage size: {str(data.get('stage_size', '')).strip()}",
+                f"Available lighting fixtures: {lights_display}",
+                f"Scene time: {str(data.get('scene_time', '')).strip()}",
+                f"Desired emotion: {str(data.get('desired_emotion', '')).strip()}",
+            )
         )
-        lights = data["available_lights"]
-        if isinstance(lights, str):
-            lights = [item.strip() for item in lights.replace("\n", ",").split(",") if item.strip()]
         return TheatreProject.objects.create(
             title=story.splitlines()[0][:255], user_prompt=complete_prompt,
             language=data["language"], genre=data["genre"], theme=data["theme"],
             actor_count=data["actor_count"], duration_minutes=data["duration_minutes"],
-            stage_size=data["stage_size"], available_lights=list(lights),
+            stage_size=data["stage_size"], available_lights=lights,
         )
 
     def _require_index(self, active_views: frozenset[ViewType]) -> None:
@@ -387,6 +493,7 @@ class ProductionService:
                         scene: list[RetrievalResult], blocking: list[RetrievalResult],
                         lighting: list[RetrievalResult], *, code: str, message: str,
                         validation_errors: list[dict[str, Any]] | None = None,
+                        validation_history: dict[str, Any] | None = None,
                         raw_output: str = "", repair_attempts: int = 0) -> GenerationRun:
         trace = [
             {
@@ -402,13 +509,16 @@ class ProductionService:
             }
             for item in [*scene, *blocking, *lighting]
         ]
-        errors = validation_errors or [{"code": code, "message": message}]
+        errors = make_json_safe(
+            validation_errors or [{"code": code, "message": message}]
+        )
         run = GenerationRun.objects.create(
             project=project, model_name=self.model_name,
             model_settings=self.model_settings, user_input=project.user_prompt,
             scene_sources=self._source_ids(scene), blocking_sources=self._source_ids(blocking),
             lighting_sources=self._source_ids(lighting), retrieval_trace=trace,
             raw_output=raw_output, validated=False, validation_errors=errors,
+            validation_history=make_json_safe(validation_history or {}),
             repair_attempts=repair_attempts,
             generation_time_seconds=perf_counter() - started,
             research_query=self._research_query,
@@ -438,12 +548,17 @@ class ProductionService:
         return payload
 
 
+@lru_cache(maxsize=1)
 def build_default_service() -> ProductionService:
+    """Build one local-model/Qdrant service per process.
+
+    Qdrant local persistent mode uses an exclusive file lock and cannot safely be
+    reopened for every request within the same Django worker.
+    """
     embedder = EmbeddingService(settings.EMBEDDING_MODEL_NAME, device=settings.EMBEDDING_DEVICE,
                                 batch_size=settings.EMBEDDING_BATCH_SIZE)
     store = QdrantStore(settings.QDRANT_PATH)
-    client = OllamaClient(settings.THETRESTAGEAI_OLLAMA_URL, settings.THETRESTAGEAI_LLM_MODEL,
-                          timeout_seconds=settings.THETRESTAGEAI_LLM_TIMEOUT_SECONDS)
+    client = create_provider()
     context_builder = ContextBuilder(max_chars=settings.RAG_CONTEXT_MAX_CHARS)
     dependencies = ProductionDependencies(
         store=store,
@@ -454,14 +569,20 @@ def build_default_service() -> ProductionService:
     )
     return ProductionService(
         dependencies,
-        model_name=settings.THETRESTAGEAI_LLM_MODEL,
+        model_name=client.model,
         model_settings=client.reproducibility_settings(),
     )
 
 
 def generate_production(request_data: dict[str, Any]) -> ProductionOutcome:
     """Public application entry point used by Django and future API adapters."""
-    service = build_default_service()
+    try:
+        service = build_default_service()
+    except ImproperlyConfigured as exc:
+        raise ProductionServiceError(
+            "llm_configuration_error",
+            "The configured LLM provider is unsupported. Choose 'gemini' or 'ollama'.",
+        ) from exc
     try:
         return service.generate_production(request_data)
     finally:

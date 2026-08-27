@@ -68,6 +68,7 @@ class SequenceProvider:
         self.responses = responses
         self.calls = 0
         self.prompts: list[str] = []
+        self.schemas: list[dict[str, Any]] = []
 
     def generate(
         self,
@@ -77,6 +78,7 @@ class SequenceProvider:
         system_prompt: str | None = None,
     ) -> str:
         self.prompts.append(prompt)
+        self.schemas.append(response_schema)
         response = self.responses[self.calls]
         self.calls += 1
         return response
@@ -164,12 +166,37 @@ class OutputValidatorTests(SimpleTestCase):
         invalid["scenes"][0]["lighting"][0]["intensity"] = 150
         provider = SequenceProvider([json.dumps(valid_data(), ensure_ascii=False)])
 
-        production = OutputValidator(provider).validate(json.dumps(invalid, ensure_ascii=False))
+        result = OutputValidator(provider).validate_with_details(
+            json.dumps(invalid, ensure_ascii=False)
+        )
 
-        self.assertEqual(production.scenes[0].lighting[0].intensity, 45)
+        self.assertEqual(result.production.scenes[0].lighting[0].intensity, 45)
         self.assertEqual(provider.calls, 1)
+        self.assertIn("type", result.initial_errors[0])
+        self.assertIn("loc", result.initial_errors[0])
+        self.assertIn("msg", result.initial_errors[0])
+        self.assertNotIn("ctx", result.initial_errors[0])
+        self.assertEqual(result.final_errors, [])
         self.assertIn("VALIDATION ERRORS", provider.prompts[0])
         self.assertIn("REQUIRED JSON SCHEMA", provider.prompts[0])
+
+    def test_repair_uses_the_request_specific_schema(self) -> None:
+        invalid = valid_data()
+        invalid["scenes"][0]["lighting"][0]["intensity"] = 150
+        provider = SequenceProvider([json.dumps(valid_data(), ensure_ascii=False)])
+        dynamic_schema = Production.json_schema()
+        dynamic_schema["properties"]["characters"]["minItems"] = 2
+        dynamic_schema["properties"]["characters"]["maxItems"] = 2
+        dynamic_schema["$defs"]["LightingCue"]["properties"]["fixture"]["enum"] = [
+            "PAR01"
+        ]
+
+        OutputValidator(provider).validate_with_details(
+            json.dumps(invalid, ensure_ascii=False),
+            response_schema=dynamic_schema,
+        )
+
+        self.assertEqual(provider.schemas, [dynamic_schema])
 
     def test_second_invalid_output_returns_controlled_error_without_more_retries(self) -> None:
         provider = SequenceProvider(["still invalid"])

@@ -1,5 +1,6 @@
 """Pydantic schemas and generated-output validation boundary."""
 
+from .constraint_validator import ConstraintValidator
 from .output_validator import OutputValidationResult, OutputValidator, ProductionValidationError
 from .production_schema import (
     BlockingCue,
@@ -11,6 +12,7 @@ from .production_schema import (
     SoundCue,
     StageZone,
 )
+from .utils import make_json_safe
 
 DialogueLine = Dialogue
 GeneratedTheatreProduction = Production
@@ -24,6 +26,7 @@ __all__ = [
     "GeneratedTheatreProduction",
     "LightingCue",
     "OutputValidator",
+    "ConstraintValidator",
     "OutputValidationResult",
     "Production",
     "ProductionValidationError",
@@ -31,4 +34,5 @@ __all__ = [
     "SoundCue",
     "StageZone",
     "TheatreScene",
+    "make_json_safe",
 ]

@@ -7,7 +7,7 @@ This repository currently contains only the project architecture and local-devel
 ## Prerequisites
 
 - Python 3.11 or newer
-- A local Ollama installation (needed in a later generation phase)
+- A Gemini API key from Google AI Studio for the default provider, or local Ollama
 
 ## Local setup
 
@@ -119,7 +119,39 @@ sources are removed within each view, irrelevant metadata is excluded, and expli
 production rules prohibit copying retrieved dialogue verbatim. Context construction
 does not call Ollama or any other language model.
 
-## Local Ollama and Qwen setup
+## Gemini setup (default provider)
+
+Install the project dependencies, including the official `google-genai` SDK:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+Create a Gemini API key in [Google AI Studio](https://aistudio.google.com/app/apikey),
+then store it only in the ignored local `.env` file:
+
+```env
+THETRESTAGEAI_LLM_PROVIDER=gemini
+GEMINI_API_KEY=YOUR_KEY
+GEMINI_MODEL=gemini-3.6-flash
+GEMINI_TIMEOUT_SECONDS=180
+GEMINI_MAX_OUTPUT_TOKENS=8192
+```
+
+Test the configured provider and run Django:
+
+```bash
+python manage.py test_llm
+python manage.py migrate
+python manage.py runserver
+```
+
+Gemini receives the request-specific production JSON Schema using structured output
+with `application/json`. No Search, Maps, grounding, or external tools are enabled.
+Gemini free-tier availability and quotas are controlled by Google, are rate-limited,
+and are not guaranteed or unlimited.
+
+## Optional local Ollama and Qwen setup
 
 No paid API is required. On Linux, install Ollama using its official installer:
 
@@ -140,12 +172,14 @@ ollama pull qwen3:4b
 ollama list
 ```
 
-Configure `.env`:
+Switch providers in `.env`:
 
 ```env
+THETRESTAGEAI_LLM_PROVIDER=ollama
 THETRESTAGEAI_OLLAMA_URL=http://localhost:11434
 THETRESTAGEAI_LLM_MODEL=qwen3:4b
-THETRESTAGEAI_LLM_TIMEOUT_SECONDS=180
+THETRESTAGEAI_LLM_TIMEOUT_SECONDS=900
+THETRESTAGEAI_LLM_NUM_PREDICT=3072
 ```
 
 The local client uses Ollama's non-streaming structured-output endpoint. It passes
@@ -166,17 +200,17 @@ For macOS and Windows installers, use the official Ollama download page:
 
 ## End-to-end web generation
 
-After migrating the database, building the RAG index, starting Ollama, and pulling
-the configured model, the New Production form runs the complete local pipeline:
+After migrating the database and building the RAG index, the New Production form
+runs the complete provider-independent pipeline. For Gemini:
 
 ```bash
 python manage.py migrate
 python manage.py build_rag_index
-ollama serve
-# In another terminal:
-ollama pull qwen3:4b
+python manage.py test_llm
 python manage.py runserver
 ```
+
+When Ollama is selected, start `ollama serve` and pull `qwen3:4b` first.
 
 The Django view delegates orchestration to `theatre.services.production_service`.
 Every accepted brief creates a project, successful runs store validated JSON and

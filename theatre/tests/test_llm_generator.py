@@ -81,6 +81,65 @@ class TheatreGeneratorTests(SimpleTestCase):
         self.assertIn("REQUIRED JSON SCHEMA", provider.prompt)
         self.assertIn("from", json.dumps(provider.schema))
 
+    def test_complete_project_requirements_reach_llm_prompt(self) -> None:
+        provider = FakeProvider(json.dumps(valid_production(), ensure_ascii=False))
+        generator = TheatreGenerator(provider, ContextBuilder(max_chars=4_000))
+        requirements = "\n".join(
+            (
+                "Story idea: ভুয়া পোস্ট নিয়ে দুই শিক্ষার্থীর সংঘাত",
+                "Theme: Fake News",
+                "Genre: Social Drama",
+                "Language: bn",
+                "Number of actors: 2",
+                "Target duration: 10 minutes",
+                "Stage size: small",
+                "Available lighting fixtures: RGB_PAR_01, RGB_PAR_02",
+                "Scene time: সন্ধ্যা",
+                "Desired emotion: রাগ, উত্তেজনা, উপলব্ধি",
+            )
+        )
+
+        generator.generate(requirements, [], [], [])
+
+        self.assertIn(requirements, provider.prompt)
+
+    def test_request_specific_schema_and_prompt_reach_initial_generation(self) -> None:
+        production = valid_production()
+        production["scenes"][0]["dialogue"].extend(
+            {
+                "id": f"D{number:02d}",
+                "speaker": "মায়া",
+                "text": f"আলোচনার সংলাপ {number}",
+            }
+            for number in range(2, 9)
+        )
+        provider = FakeProvider(json.dumps(production, ensure_ascii=False))
+        generator = TheatreGenerator(provider, ContextBuilder(max_chars=4_000))
+
+        generator.generate(
+            "Story idea: একটি সংক্ষিপ্ত নাটক",
+            [],
+            [],
+            [],
+            constraints={
+                "actor_count": 1,
+                "duration_minutes": 1,
+                "available_lights": ["PAR01"],
+            },
+        )
+
+        self.assertEqual(provider.schema["properties"]["characters"]["minItems"], 1)
+        self.assertEqual(
+            provider.schema["$defs"]["Scene"]["properties"]["dialogue"]["minItems"],
+            8,
+        )
+        self.assertEqual(
+            provider.schema["$defs"]["LightingCue"]["properties"]["fixture"]["enum"],
+            ["PAR01"],
+        )
+        self.assertIn("Create at least 1 scene", provider.prompt)
+        self.assertIn("at least 8 dialogue entries", provider.prompt)
+
     def test_markdown_wrapped_json_is_rejected(self) -> None:
         response = "```json\n" + json.dumps(valid_production(), ensure_ascii=False) + "\n```"
         generator = TheatreGenerator(FakeProvider(response), ContextBuilder())

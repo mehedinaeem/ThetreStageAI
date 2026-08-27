@@ -72,15 +72,24 @@ class FakeRetriever:
     def retrieve(self, _: str, **kwargs: Any) -> list[RetrievalResult]:
         self.limits.append(kwargs["limit"])
         self.calls.append(kwargs)
-        return self.results
+        return self.results[: kwargs["limit"]]
 
 
 class FakeGenerator:
     def __init__(self, error: Exception | None = None) -> None:
         self.error = error
+        self.user_requirements: list[str] = []
 
-    def generate(self, _: str, scene: list[RetrievalResult], blocking: list[RetrievalResult],
-                 lighting: list[RetrievalResult]) -> GenerationResult:
+    def generate(
+        self,
+        user_requirements: str,
+        scene: list[RetrievalResult],
+        blocking: list[RetrievalResult],
+        lighting: list[RetrievalResult],
+        *,
+        constraints: dict[str, Any] | None = None,
+    ) -> GenerationResult:
+        self.user_requirements.append(user_requirements)
         if self.error:
             raise self.error
         all_results = [*scene, *blocking, *lighting]
@@ -89,6 +98,7 @@ class FakeGenerator:
             retrieval_trace=[RetrievalTrace(source_id=item.source_id, rank=item.rank, score=item.score, view_type=item.view_type) for item in all_results],
             raw_output=json.dumps(production().model_dump(mode="json", by_alias=True), ensure_ascii=False),
             accepted_output="{}", validation_errors=[], repaired=False,
+            validation_history={"initial": [], "final": []},
         )
 
 
@@ -106,6 +116,71 @@ def service(*, exists: bool = True, empty_view: ViewType | None = None,
 
 
 class ProductionServiceIntegrationTests(TestCase):
+    def test_complete_form_constraints_are_saved_and_passed_to_generation(self) -> None:
+        pipeline, retrievers = service()
+        form_data = {
+            "story_idea": "বিশ্ববিদ্যালয়ের দুই শিক্ষার্থীর মধ্যে একটি ভুয়া পোস্ট নিয়ে সংঘাত তৈরি হয়।",
+            "theme": "Fake News",
+            "genre": "Social Drama",
+            "language": "bn",
+            "actor_count": 2,
+            "duration_minutes": 10,
+            "stage_size": "small",
+            "available_lights": "RGB_PAR_01, RGB_PAR_02, RGB_PAR_03, RGB_PAR_04",
+            "scene_time": "সন্ধ্যা",
+            "desired_emotion": "রাগ, উত্তেজনা, উপলব্ধি",
+        }
+
+        outcome = pipeline.generate_production(form_data)
+
+        expected_lines = (
+            "Story idea: বিশ্ববিদ্যালয়ের দুই শিক্ষার্থীর মধ্যে একটি ভুয়া পোস্ট নিয়ে সংঘাত তৈরি হয়।",
+            "Theme: Fake News",
+            "Genre: Social Drama",
+            "Language: bn",
+            "Number of actors: 2",
+            "Target duration: 10 minutes",
+            "Stage size: small",
+            "Available lighting fixtures: RGB_PAR_01, RGB_PAR_02, RGB_PAR_03, RGB_PAR_04",
+            "Scene time: সন্ধ্যা",
+            "Desired emotion: রাগ, উত্তেজনা, উপলব্ধি",
+        )
+        self.assertEqual(outcome.project.user_prompt, "\n".join(expected_lines))
+        self.assertEqual(
+            outcome.project.available_lights,
+            ["RGB_PAR_01", "RGB_PAR_02", "RGB_PAR_03", "RGB_PAR_04"],
+        )
+        self.assertEqual(
+            pipeline.dependencies.generator.user_requirements,
+            [outcome.project.user_prompt],
+        )
+        self.assertTrue(
+            all(retriever.calls for retriever in retrievers),
+            "The complete project prompt must also reach all active retrievers.",
+        )
+
+    def test_available_lights_normalizes_multiline_lists_and_empty_values(self) -> None:
+        cases = (
+            (
+                "RGB_PAR_01\n RGB_PAR_02,RGB_PAR_03",
+                ["RGB_PAR_01", "RGB_PAR_02", "RGB_PAR_03"],
+            ),
+            ([" RGB_PAR_01 ", 42, None, ""], ["RGB_PAR_01", "42", "None"]),
+            (None, []),
+        )
+        for raw_lights, expected in cases:
+            with self.subTest(raw_lights=raw_lights):
+                pipeline, _ = service()
+                outcome = pipeline.generate_production(
+                    request_data() | {"available_lights": raw_lights}
+                )
+                self.assertEqual(outcome.project.available_lights, expected)
+                expected_display = ", ".join(expected) if expected else "None specified"
+                self.assertIn(
+                    f"Available lighting fixtures: {expected_display}",
+                    outcome.project.user_prompt,
+                )
+
     def test_complete_pipeline_persists_validated_project_and_trace(self) -> None:
         pipeline, retrievers = service()
         outcome = pipeline.generate_production(request_data())
@@ -116,14 +191,14 @@ class ProductionServiceIntegrationTests(TestCase):
         self.assertEqual(outcome.run.generated_json["title"], "শেষ কথা")
         self.assertEqual(outcome.run.user_input, outcome.project.user_prompt)
         self.assertEqual(outcome.run.repair_attempts, 0)
-        self.assertEqual(outcome.run.retrieval_config["scene_top_k"], 5)
-        self.assertEqual(outcome.run.retrieval_config["combined_top_k"], 11)
-        self.assertEqual(len(outcome.run.scene_sources), 5)
-        self.assertEqual(len(outcome.run.blocking_sources), 3)
-        self.assertEqual(len(outcome.run.lighting_sources), 3)
-        self.assertEqual(len(outcome.run.retrieval_trace), 11)
+        self.assertEqual(outcome.run.retrieval_config["scene_top_k"], 3)
+        self.assertEqual(outcome.run.retrieval_config["combined_top_k"], 7)
+        self.assertEqual(len(outcome.run.scene_sources), 3)
+        self.assertEqual(len(outcome.run.blocking_sources), 2)
+        self.assertEqual(len(outcome.run.lighting_sources), 2)
+        self.assertEqual(len(outcome.run.retrieval_trace), 7)
         self.assertEqual(outcome.run.retrieval_trace[0]["metadata"]["theme"], "সম্পর্ক")
-        self.assertEqual([item.limits for item in retrievers], [[5], [3], [3]])
+        self.assertEqual([item.limits for item in retrievers], [[3], [2], [2]])
 
     def test_research_generation_persists_exact_query_and_top_k(self) -> None:
         pipeline, _ = service()
@@ -155,10 +230,10 @@ class ProductionServiceIntegrationTests(TestCase):
 
     def test_partial_modes_call_only_their_active_retrievers(self) -> None:
         cases = (
-            (RAGMode.SCENE_ONLY, [[5], [], []]),
-            (RAGMode.SCENE_BLOCKING, [[5], [3], []]),
-            (RAGMode.SCENE_LIGHTING, [[5], [], [3]]),
-            (RAGMode.FULL_MULTIVIEW, [[5], [3], [3]]),
+            (RAGMode.SCENE_ONLY, [[3], [], []]),
+            (RAGMode.SCENE_BLOCKING, [[3], [2], []]),
+            (RAGMode.SCENE_LIGHTING, [[3], [], [2]]),
+            (RAGMode.FULL_MULTIVIEW, [[3], [2], [2]]),
         )
         for mode, expected_limits in cases:
             with self.subTest(mode=mode):
@@ -194,7 +269,7 @@ class ProductionServiceIntegrationTests(TestCase):
         with self.assertRaises(ProductionServiceError) as captured:
             pipeline.generate_production(request_data())
         self.assertEqual(captured.exception.code, "empty_retrieval")
-        self.assertEqual(len(GenerationRun.objects.get().scene_sources), 5)
+        self.assertEqual(len(GenerationRun.objects.get().scene_sources), 3)
 
     def test_local_llm_failures_have_specific_codes(self) -> None:
         cases = (
@@ -228,6 +303,52 @@ class ProductionServiceIntegrationTests(TestCase):
         self.assertEqual(project.generated_json, {})
         self.assertFalse(project.generation_runs.get().validated)
         self.assertEqual(project.generation_runs.get().repair_attempts, 1)
+        self.assertEqual(
+            project.generation_runs.get().validation_errors,
+            [{"type": "rgb"}],
+        )
+        self.assertEqual(
+            project.generation_runs.get().validation_history,
+            {
+                "initial": [{"type": "intensity"}],
+                "final": [{"type": "rgb"}],
+            },
+        )
+
+    def test_failure_errors_with_exception_context_are_saved_as_json(self) -> None:
+        unsafe_error = {
+            "type": "value_error",
+            "loc": ("scenes", 0),
+            "msg": "Value error, Invalid blocking trigger D03",
+            "ctx": {"error": ValueError("Invalid blocking trigger D03")},
+        }
+        error = ProductionValidationError(
+            "invalid",
+            initial_errors=[unsafe_error],
+            final_errors=[unsafe_error],
+            initial_output='{"invalid": true}',
+            corrected_output='{"still_invalid": true}',
+        )
+        pipeline, _ = service(generator_error=error)
+
+        with self.assertRaises(ProductionServiceError) as captured:
+            pipeline.generate_production(request_data())
+
+        self.assertEqual(
+            captured.exception.user_message,
+            "The generated production could not be validated after one repair attempt. "
+            "No unsafe lighting output was saved.",
+        )
+        run = GenerationRun.objects.get()
+        self.assertFalse(run.validated)
+        self.assertEqual(run.repair_attempts, 1)
+        self.assertEqual(run.raw_output, '{"still_invalid": true}')
+        self.assertEqual(run.validation_errors[0]["loc"], ["scenes", 0])
+        self.assertEqual(
+            run.validation_errors[0]["ctx"]["error"],
+            "Invalid blocking trigger D03",
+        )
+        json.dumps(run.validation_errors)
 
     @patch("theatre.views.generate_production")
     def test_view_renders_safe_pipeline_error(self, mocked_generate: Any) -> None:

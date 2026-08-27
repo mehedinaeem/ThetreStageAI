@@ -14,6 +14,7 @@ logger = logging.getLogger("theatre.research.experiments")
 SAFE_MODEL_SETTING_KEYS = frozenset(
     {
         "provider",
+        "model",
         "temperature",
         "think",
         "timeout_seconds",
@@ -22,6 +23,8 @@ SAFE_MODEL_SETTING_KEYS = frozenset(
         "top_p",
         "top_k",
         "repeat_penalty",
+        "num_predict",
+        "max_output_tokens",
     }
 )
 SAFE_ERROR_KEYS = frozenset({"code", "type", "loc", "msg", "message"})

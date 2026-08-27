@@ -4,62 +4,46 @@ from __future__ import annotations
 import json
 import logging
 import socket
-from abc import ABC, abstractmethod
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 logger = logging.getLogger(__name__)
 
-
-class LLMError(RuntimeError):
-    """Base error for local language-model operations."""
-
-
-class LLMConnectionError(LLMError):
-    """The configured local LLM server could not be reached."""
-
-
-class LLMTimeoutError(LLMError):
-    """The local model did not respond before the configured timeout."""
-
-
-class ModelUnavailableError(LLMError):
-    """The requested local model is not installed or available."""
-
-
-class InvalidLLMResponseError(LLMError):
-    """The provider returned an invalid transport envelope or generation."""
-
-
-class LLMProvider(ABC):
-    @abstractmethod
-    def generate(
-        self,
-        prompt: str,
-        *,
-        response_schema: dict[str, Any],
-        system_prompt: str | None = None,
-    ) -> str:
-        """Return the provider's generated JSON text."""
+from .base import (
+    InvalidLLMResponseError,
+    LLMConnectionError,
+    LLMProvider,
+    LLMTimeoutError,
+    ModelUnavailableError,
+)
 
 
 class OllamaClient(LLMProvider):
     """Non-streaming client for Ollama's local `/api/generate` endpoint."""
 
-    generation_options = {"temperature": 0.2}
     max_http_response_bytes = 2_000_000
 
-    def __init__(self, base_url: str, model: str, *, timeout_seconds: int = 180) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        model: str,
+        *,
+        timeout_seconds: int = 180,
+        num_predict: int = 4096,
+    ) -> None:
         if not base_url.strip():
             raise ValueError("Ollama URL cannot be empty")
         if not model.strip():
             raise ValueError("Ollama model cannot be empty")
         if timeout_seconds < 1:
             raise ValueError("Ollama timeout must be positive")
+        if num_predict < 1:
+            raise ValueError("Ollama num_predict must be positive")
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.timeout_seconds = timeout_seconds
+        self.num_predict = num_predict
 
     def generate(
         self,
@@ -74,7 +58,7 @@ class OllamaClient(LLMProvider):
             "stream": False,
             "think": False,
             "format": response_schema,
-            "options": dict(self.generation_options),
+            "options": {"temperature": 0.2, "num_predict": self.num_predict},
         }
         if system_prompt:
             body["system"] = system_prompt
@@ -137,7 +121,8 @@ class OllamaClient(LLMProvider):
         """Return only non-secret settings that affect model generation."""
         return {
             "provider": "ollama",
-            "temperature": self.generation_options["temperature"],
+            "temperature": 0.2,
+            "num_predict": self.num_predict,
             "think": False,
             "timeout_seconds": self.timeout_seconds,
         }

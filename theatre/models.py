@@ -121,6 +121,11 @@ class GenerationRun(models.Model):
     )
     validated = models.BooleanField(default=False, db_index=True)
     validation_errors = models.JSONField(default=list, blank=True)
+    validation_history = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Separate initial and final validation errors for repair research.",
+    )
     repair_attempts = models.PositiveSmallIntegerField(
         default=0,
         help_text="Number of structured validation-repair requests made.",
