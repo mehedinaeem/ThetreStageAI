@@ -217,6 +217,137 @@ Every accepted brief creates a project, successful runs store validated JSON and
 retrieval evidence, and failed runs retain controlled diagnostic evidence without
 exposing stack traces or unsafe lighting data to the UI.
 
+## Example production
+
+### Input
+
+```text
+Story idea:
+দুই বিশ্ববিদ্যালয় শিক্ষার্থী একটি ভুয়া অনলাইন পোস্ট নিয়ে দ্বন্দ্বে জড়িয়ে পড়ে।
+শেষে তারা তথ্য যাচাইয়ের গুরুত্ব বুঝতে পারে।
+
+Theme: Fake News and Responsible Social Media Use
+Genre: social_drama
+Language: bn
+Number of actors: 2
+Target duration: 1 minute
+Stage size: small
+Available lighting fixtures: RGB_PAR_01, RGB_PAR_02, RGB_PAR_03, RGB_PAR_04
+Scene time: সন্ধ্যা
+Desired emotion: রাগ, দ্বিধা, উপলব্ধি
+```
+
+### Validated structured output
+
+```json
+{
+  "title": "গুজবের ছায়া",
+  "theme": "Fake News and Responsible Social Media Use",
+  "genre": "social_drama",
+  "characters": [
+    {
+      "name": "আকাশ",
+      "description": "বিশ্ববিদ্যালয়ের সাংবাদিকতা বিভাগের দ্বিতীয় বর্ষের সচেতন ছাত্র, যে সত্য ও তথ্যের সঠিকতায় বিশ্বাসী।"
+    },
+    {
+      "name": "সোহান",
+      "description": "কম্পিউটার সায়েন্স বিভাগের আবেগপ্রবণ ছাত্র, যে তথ্য যাচাই না করে দ্রুত সোশ্যাল মিডিয়ায় খবর ছড়িয়ে দেয়।"
+    }
+  ],
+  "scenes": [
+    {
+      "id": "SCENE_01",
+      "title": "ভুল তথ্যের মাশুল",
+      "location": "বিশ্ববিদ্যালয় ক্যাফেটেরিয়ার কোণ",
+      "time": "সন্ধ্যা",
+      "dialogue": [
+        {
+          "id": "D01",
+          "speaker": "আকাশ",
+          "text": "সোহান, তুমি ফেসবুকে বিশ্ববিদ্যালয়ের স্কলারশিপ বাতিলের এই ভুয়া বিজ্ঞপ্তিটা শেয়ার করলে কেন?"
+        },
+        {
+          "id": "D02",
+          "speaker": "সোহান",
+          "text": "কেন, একটা পরিচিত পেজে পেলাম আর শেয়ার দিলাম! এতে এত রাগান্বিত হওয়ার কী আছে?"
+        },
+        {
+          "id": "D03",
+          "speaker": "আকাশ",
+          "text": "কী আছে মানে? হাজার হাজার সাধারণ শিক্ষার্থী এখন দুশ্চিন্তায় ভেঙে পড়ছে! তুমি কি খবরটার সত্যতা যাচাই করেছিলে?"
+        },
+        {
+          "id": "D04",
+          "speaker": "সোহান",
+          "text": "আমি তো ভেবেছিলাম পেজটি অফিশিয়াল। সবাই শেয়ার করছিল, তাই আমিও আবেগবশত ক্লিক করে ফেলেছি।"
+        },
+        {
+          "id": "D05",
+          "speaker": "আকাশ",
+          "text": "সবাই শেয়ার করলেই সেটা সত্য হয়ে যায় না! শেয়ার করার আগে মূল ওয়েবসাইট বা নোটিশ বোর্ডে চোখ বুলানো কি খুব কঠিন ছিল?"
+        },
+        {
+          "id": "D06",
+          "speaker": "সোহান",
+          "text": "আমার ভুল হয়ে গেছে... সত্যি বলতে আমি বুঝতে পারিনি একটা শেয়ার এভাবে গুজব ছড়িয়ে দিতে পারে।"
+        },
+        {
+          "id": "D07",
+          "speaker": "আকাশ",
+          "text": "সামাজিক যোগাযোগমাধ্যমে আমাদের প্রতিটি ক্লিকের একটা দায়িত্ব থাকে। এখন আর দ্বিধা না করে পোস্টটা মুছে একটা ভুল স্বীকারের ব্যাখ্যা দাও।"
+        },
+        {
+          "id": "D08",
+          "speaker": "সোহান",
+          "text": "তুমি ঠিক বলেছ। আমি এখনই ভুয়া পোস্টটা ডিলিট করে সত্যিটা জানিয়ে দিচ্ছি। ভবিষ্যতে তথ্য যাচাই না করে আর কিছু ছড়াব না।"
+        }
+      ],
+      "stage_directions": [
+        "আকাশ হাতে মোবাইল নিয়ে ক্ষুব্ধ ভঙ্গিতে CSL থেকে দ্রুত হেঁটে CSC-তে এসে দাঁড়ায়।",
+        "সোহান অপরাধীর মতো মুখ নিচু করে USR অঞ্চল থেকে ধীরে ধীরে CSC-তে আকাশের কাছে আসে।"
+      ],
+      "blocking": [
+        {
+          "actor": "আকাশ",
+          "from": "CSL",
+          "to": "CSC",
+          "action": "উত্তেজিত হয়ে মোবাইলের স্ক্রিন দেখিয়ে সোহানের সামনে আসা",
+          "trigger": "D01"
+        },
+        {
+          "actor": "সোহান",
+          "from": "USR",
+          "to": "CSC",
+          "action": "অনুতপ্ত হয়ে মাথা নিচু করে এগিয়ে আসা",
+          "trigger": "D06"
+        }
+      ],
+      "lighting": [
+        {
+          "cue_id": "LQ01",
+          "trigger": "scene_start",
+          "fixture": "RGB_PAR_01",
+          "focus_zone": "CSL",
+          "rgb": [220, 60, 40],
+          "intensity": 70,
+          "fade_seconds": 2.0
+        },
+        {
+          "cue_id": "LQ02",
+          "trigger": "D06",
+          "fixture": "RGB_PAR_02",
+          "focus_zone": "CSC",
+          "rgb": [240, 190, 90],
+          "intensity": 85,
+          "fade_seconds": 1.5
+        }
+      ],
+      "sound": []
+    }
+  ]
+}
+```
+
 ## Research evaluation
 
 The `evaluation` package defines the four comparison conditions, ranked retrieval
