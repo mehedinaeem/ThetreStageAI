@@ -143,7 +143,7 @@ duplicate entries are explicitly desired.
 Configure the dataset directory in the project `.env` file:
 
 ```env
-THEATRE_DATASET_PATH=Bangla_Natok_500_MultiView_RAG_Dataset/bangla_natok_500
+THEATRE_DATASET_PATH=Dataset/bangla_natok_500
 ```
 
 Inspect and validate the files without modifying them:

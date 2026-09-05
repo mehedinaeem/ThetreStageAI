@@ -134,7 +134,7 @@ DATA_ROOT = managed_storage_path("DATA_ROOT", "data")
 QDRANT_PATH = managed_storage_path("QDRANT_PATH", "storage/qdrant")
 THEATRE_DATASET_PATH = project_path(
     "THEATRE_DATASET_PATH",
-    "Bangla_Natok_500_MultiView_RAG_Dataset/bangla_natok_500",
+    "Dataset/bangla_natok_500",
 )
 if QDRANT_PATH == THEATRE_DATASET_PATH or QDRANT_PATH.is_relative_to(THEATRE_DATASET_PATH):
     raise ImproperlyConfigured("QDRANT_PATH cannot be inside the source dataset directory")
