@@ -1,0 +1,5 @@
+Metric,Count
+Lighting cues,1000
+Valid RGB cues,1000
+Valid intensity cues,1000
+Non-negative fade cues,1000

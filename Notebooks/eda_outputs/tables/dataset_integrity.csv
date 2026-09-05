@@ -1,0 +1,7 @@
+metric,value
+Total records,500
+Unique record IDs,500
+Duplicate record IDs,0
+Unique titles,500
+Duplicate full rows (flattened table),0
+Rows with any missing flattened value,0

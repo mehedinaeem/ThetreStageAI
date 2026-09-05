@@ -1,0 +1,4 @@
+view_type,count,mean,std,min,median,max
+blocking,500,514.0,13.5,483,513.0,555
+lighting,500,475.4,6.6,460,475.0,495
+scene,500,719.3,23.3,657,718.5,780

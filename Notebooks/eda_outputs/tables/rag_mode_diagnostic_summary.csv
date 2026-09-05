@@ -1,0 +1,2 @@
+rag_mode,runs,validated,validation_rate,median_generation_time_s,mean_repairs
+full_multiview,4,4,100.0,30.55,0.0

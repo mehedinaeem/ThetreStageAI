@@ -217,7 +217,112 @@ Every accepted brief creates a project, successful runs store validated JSON and
 retrieval evidence, and failed runs retain controlled diagnostic evidence without
 exposing stack traces or unsafe lighting data to the UI.
 
-## Example production
+## Generated production example
+
+The following validated example demonstrates how one structured production brief is
+transformed into Bengali dialogue, stage directions, actor blocking, and executable
+lighting cues.
+
+### Production brief
+
+```text
+Story Idea:
+দুই বিশ্ববিদ্যালয় শিক্ষার্থী একটি গ্রুপ প্রজেক্টে কাজ করতে গিয়ে মতবিরোধে জড়িয়ে পড়ে। একজন সব সিদ্ধান্ত একাই নিতে চায়, অন্যজন মনে করে দলের সবার মতামত সমান গুরুত্ব পাওয়া উচিত। তর্কের পর তারা নিজেদের ভুল বুঝতে পারে এবং পারস্পরিক সম্মান ও দলগত সহযোগিতার মাধ্যমে প্রজেক্টটি সম্পন্ন করার সিদ্ধান্ত নেয়।
+
+Theme: Teamwork, Mutual Respect and Collaborative Problem Solving
+Genre: social_drama
+Language: bn
+Number of Actors: 3
+Duration (minutes): 5
+Stage Size: small
+Available Lights: RGB_PAR_01, RGB_PAR_02, RGB_PAR_03, RGB_PAR_04
+Scene Time: বিকেল
+Desired Emotion: বিরক্তি, দ্বিধা, উত্তেজনা, উপলব্ধি, সহযোগিতা
+```
+
+### Application output
+
+#### Script and stage directions
+
+![Generated Bengali script and stage directions](docs/images/script_zoom.png)
+
+#### Actor blocking
+
+![Generated actor blocking table](docs/images/blocking.png)
+
+#### Structured lighting cues
+
+![Generated lighting cue table](docs/images/lighting.png)
+
+#### Validated raw JSON
+
+![Validated production JSON displayed in ThetreStageAI](docs/images/raw_json.png)
+
+<details>
+<summary>View the complete validated JSON output</summary>
+
+```json
+{
+  "title": "দলগত সিদ্ধান্ত",
+  "theme": "Teamwork, Mutual Respect and Collaborative Problem Solving",
+  "genre": "social_drama",
+  "characters": [
+    {
+      "name": "অরিত্র",
+      "description": "বিশ্ববিদ্যালয়ের মেধাবী ও একগুঁয়ে শিক্ষার্থী, যে একা সব সিদ্ধান্ত নিতে পছন্দ করে।"
+    },
+    {
+      "name": "নাবিলা",
+      "description": "যৌক্তিক ও দলগত কাজের ভক্ত শিক্ষার্থী, যে সবার মতামতকে প্রাধান্য দিতে চায়।"
+    },
+    {
+      "name": "আসিফ",
+      "description": "সহনশীল সহপাঠী, যে দুজনের মধ্যে সমঝোতা তৈরি করতে সাহায্য করে।"
+    }
+  ],
+  "scenes": [
+    {
+      "id": "SCENE_01",
+      "title": "মতভেদ ও বোঝাপড়া",
+      "location": "বিশ্ববিদ্যালয় সেমিনার রুম",
+      "time": "বিকেল",
+      "dialogue": [
+        {"id": "D01", "speaker": "অরিত্র", "text": "আমি স্লাইডগুলোর সব ডিজাইন শেষ করে ফেলেছি, কালই প্রেজেন্টেশন দেব।"},
+        {"id": "D02", "speaker": "নাবিলা", "text": "অরিত্র, তুমি আমাদের সাথে কোনো আলোচনাই করলে না! আমরা পুরো দল মিলে কাজ করছি।"},
+        {"id": "D03", "speaker": "আসিফ", "text": "শান্ত হও নাবিলা। অরিত্র, দলগত প্রজেক্টে সবার মতামত নেওয়া খুব জরুরি।"},
+        {"id": "D04", "speaker": "অরিত্র", "text": "সময় খুব কম ছিল। সবাই মিলে সিদ্ধান্ত নিতে গেলে অনেক দেরি হয়ে যেত।"},
+        {"id": "D05", "speaker": "নাবিলা", "text": "কিন্তু প্রজেক্টের দ্বিতীয় অংশে গবেষণার মূল উপাত্তগুলো বাদ পড়ে গেছে, যা আসিফ তৈরি করেছিল।"},
+        {"id": "D06", "speaker": "আসিফ", "text": "আমার মনে হয় একা একা সব দায়িত্ব না নিয়ে কাজগুলো ভাগ করে নেওয়া উচিত ছিল।"},
+        {"id": "D07", "speaker": "অরিত্র", "text": "আমি বুঝতে পারছি, তাড়াহুড়ো করতে গিয়ে আমি ভুল সিদ্ধান্ত নিয়ে ফেলেছি।"},
+        {"id": "D08", "speaker": "নাবিলা", "text": "নিজের ভুল স্বীকার করার জন্য ধন্যবাদ। আমরা সবাই এখন একসঙ্গে বসে ফাইলটি ঠিক করি।"},
+        {"id": "D09", "speaker": "আসিফ", "text": "হ্যাঁ, চলো সবাই মিলে বিকেলের মধ্যেই প্রেজেন্টেশনটি গুছিয়ে ফেলি।"},
+        {"id": "D10", "speaker": "অরিত্র", "text": "ধন্যবাদ বন্ধুদের, দলগত প্রচেষ্টাই যে সেরা সমাধান তা আমি এবার উপলব্ধি করলাম।"}
+      ],
+      "stage_directions": [
+        "বিকেলের হালকা আলোয় সেমিনার রুমের টেবিলে বই ও ল্যাপটপ ছড়ানো রয়েছে।",
+        "অরিত্র সিএসসি অঞ্চলে ল্যাপটপ নিয়ে ব্যস্ত, নাবিলা ও আসিফ তার দিকে এগিয়ে আসে।"
+      ],
+      "blocking": [
+        {"actor": "অরিত্র", "from": "USC", "to": "CSC", "action": "ল্যাপটপ টেবিলে রেখে নাবিলা ও আসিফের দিকে তাকায়", "trigger": "D01"},
+        {"actor": "নাবিলা", "from": "CSL", "to": "CSC", "action": "উদ্বেগ নিয়ে সামনে এগিয়ে এসে পেপার ফাইল সামনে ধরে", "trigger": "D02"},
+        {"actor": "আসিফ", "from": "CSR", "to": "DSC", "action": "হাত তুলে দুজনকে থামানোর ইঙ্গিত করে মাঝখানে দাঁড়ায়", "trigger": "D03"},
+        {"actor": "অরিত্র", "from": "CSC", "to": "DSL", "action": "মাথা নিচু করে অনুশোচনার সাথে ধীরে ধীরে পিছিয়ে যায়", "trigger": "D07"}
+      ],
+      "lighting": [
+        {"cue_id": "LQ01", "trigger": "scene_start", "fixture": "RGB_PAR_01", "focus_zone": "CSC", "rgb": [255, 200, 150], "intensity": 80, "fade_seconds": 1.5},
+        {"cue_id": "LQ02", "trigger": "D02", "fixture": "RGB_PAR_02", "focus_zone": "CSL", "rgb": [220, 100, 80], "intensity": 70, "fade_seconds": 1.0},
+        {"cue_id": "LQ03", "trigger": "D07", "fixture": "RGB_PAR_03", "focus_zone": "DSL", "rgb": [100, 150, 255], "intensity": 75, "fade_seconds": 2.0},
+        {"cue_id": "LQ04", "trigger": "D10", "fixture": "RGB_PAR_04", "focus_zone": "DSC", "rgb": [255, 255, 200], "intensity": 90, "fade_seconds": 1.5}
+      ],
+      "sound": []
+    }
+  ]
+}
+```
+
+</details>
+
+### Additional validated example
 
 ### Input
 
@@ -350,6 +455,24 @@ Desired emotion: রাগ, দ্বিধা, উপলব্ধি
 
 ## Research evaluation
 
+### Dataset EDA notebook
+
+The exploratory dataset analysis is available at
+[`Notebooks/ThetreStageAI_Dataset_EDA.ipynb`](Notebooks/ThetreStageAI_Dataset_EDA.ipynb).
+Install its optional dependencies separately so the web-application dependency set
+remains focused:
+
+```bash
+python -m pip install -r requirements-notebook.txt
+python -m ipykernel install --user --name thetrestageai --display-name "ThetreStageAI (.venv)"
+jupyter lab
+```
+
+Select the **ThetreStageAI (.venv)** kernel, open the notebook, and choose **Restart
+Kernel and Run All Cells**. The notebook locates the dataset whether Jupyter starts
+from the repository root or from `Notebooks/`, and writes figures and tables under
+`eda_outputs/` relative to the notebook working directory.
+
 The `evaluation` package defines the four comparison conditions, ranked retrieval
 metrics, objective generation measurements, append-only JSONL experiment storage,
 and CSV exports. Concrete system adapters must execute the real A/B/C/D pipelines
@@ -380,4 +503,3 @@ similarity scores, duration, validation status, repair count, and safe error fie
 Raw model output, retrieved payloads, server URLs, credentials, and environment
 variables are never included. Configure verbosity with
 `THETRESTAGEAI_EXPERIMENT_LOG_LEVEL`.
-# ThetreStageAI

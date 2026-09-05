@@ -1,0 +1,5 @@
+view,documents,unique_ids,unique_source_ids,unique_search_texts,mean_search_text_chars
+scene,500,500,500,500,719.3
+blocking,500,500,500,500,514.0
+lighting,500,500,500,500,475.4
+all,1500,1500,500,1500,569.6

@@ -1,0 +1,17 @@
+Statistic,Value
+Theatre records,500
+Themes,15
+Genres,5
+Scene types,4
+Locations,8
+Primary emotions,5
+Unique character names,20
+Dialogue lines,3000
+Unique dialogue texts,39
+Blocking cues,1000
+Lighting cues,1000
+Sound cues,1000
+Scene retrieval documents,500
+Blocking retrieval documents,500
+Lighting retrieval documents,500
+Total retrieval documents,1500
